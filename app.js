@@ -3372,6 +3372,350 @@
       saveAs(content, "story_studio_v37_bundle.zip");
     });
   }
+  // ─── مشروع جاهز (JSON) — استيراد سياق طويل ────────────────────────────────
+  const LONGFORM_SETTINGS_KEY = "story_studio_longform_settings";
+  let longformSource = { fileName: "", data: null };
+
+  function _lfEscHtml(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function _lfCountWords(text) { return String(text || "").trim().split(/\s+/).filter(Boolean).length; }
+
+  function loadLongformSettings() {
+    let s = { sceneSeconds: 30, wordsPerSec: 2.5 };
+    try {
+      const raw = JSON.parse(localStorage.getItem(LONGFORM_SETTINGS_KEY) || "{}");
+      if (raw && typeof raw === "object") {
+        if (Number(raw.sceneSeconds) > 0) s.sceneSeconds = Number(raw.sceneSeconds);
+        if (Number(raw.wordsPerSec) > 0) s.wordsPerSec = Number(raw.wordsPerSec);
+      }
+    } catch (e) {}
+    const secEl = document.getElementById("longformSceneSecondsInput");
+    const wpsEl = document.getElementById("longformWordsPerSecInput");
+    if (secEl) secEl.value = s.sceneSeconds;
+    if (wpsEl) wpsEl.value = s.wordsPerSec;
+    updateLongformWordsHint();
+  }
+  function getLongformSettings() {
+    const sec = Math.max(3, Number(document.getElementById("longformSceneSecondsInput")?.value) || 30);
+    const wps = Math.max(0.5, Number(document.getElementById("longformWordsPerSecInput")?.value) || 2.5);
+    return { sceneSeconds: sec, wordsPerSec: wps, targetWords: Math.max(4, Math.round(sec * wps)) };
+  }
+  function saveLongformSettings() {
+    const s = getLongformSettings();
+    try { localStorage.setItem(LONGFORM_SETTINGS_KEY, JSON.stringify({ sceneSeconds: s.sceneSeconds, wordsPerSec: s.wordsPerSec })); } catch (e) {}
+    updateLongformWordsHint();
+  }
+  function updateLongformWordsHint() {
+    const s = getLongformSettings();
+    const hint = document.getElementById("longformWordsPerSceneHint");
+    if (hint) hint.textContent = s.targetWords;
+    renderLongformPreview();
+  }
+  function setLongformStatus(msg) {
+    const el = document.getElementById("longformStatus");
+    if (el) el.textContent = msg;
+    const ps = document.getElementById("pipelineStatus");
+    if (ps) ps.textContent = msg;
+  }
+  function validateLongformData(d) {
+    if (!d || typeof d !== "object") return "الملف غير صالح (ليس JSON كائن).";
+    if (!Array.isArray(d.paragraphs) || !d.paragraphs.length) return "الملف لا يحتوي على مصفوفة paragraphs.";
+    if (!d.paragraphs.some(function (p) { return String(p || "").trim(); })) return "مصفوفة paragraphs فارغة.";
+    return "";
+  }
+  async function handleLongformJsonFile(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const meta = document.getElementById("longformFileMeta");
+    try {
+      const text = await file.text();
+      const data = safeParseJson(text);
+      const err = validateLongformData(data);
+      if (err) {
+        longformSource = { fileName: "", data: null };
+        if (meta) { meta.style.display = "block"; meta.textContent = "⚠ " + err; }
+        document.getElementById("longformRunAllBtn").disabled = true;
+        document.getElementById("longformPhaseOneBtn").disabled = true;
+        renderLongformPreview();
+        renderLongformExtras();
+        return;
+      }
+      longformSource = { fileName: file.name, data: data };
+      if (meta) { meta.style.display = "block"; meta.textContent = "📄 " + file.name; }
+      document.getElementById("longformRunAllBtn").disabled = false;
+      document.getElementById("longformPhaseOneBtn").disabled = false;
+      renderLongformPreview();
+      renderLongformExtras();
+    } catch (e) {
+      if (meta) { meta.style.display = "block"; meta.textContent = "⚠ تعذّر قراءة الملف."; }
+      alert("تعذّر قراءة الملف: " + (e && e.message ? e.message : e));
+    }
+  }
+  function renderLongformPreview() {
+    const el = document.getElementById("longformPreview");
+    if (!el) return;
+    const d = longformSource.data;
+    if (!d) { el.innerHTML = '<div class="hint">لم يتم رفع ملف صالح بعد.</div>'; return; }
+    const s = getLongformSettings();
+    const totalWords = (d.paragraphs || []).reduce(function (a, p) { return a + _lfCountWords(p); }, 0);
+    const estScenes = Math.max(1, Math.round(totalWords / s.targetWords));
+    const estMin = Math.max(1, Math.round((totalWords / s.wordsPerSec) / 60));
+    const safety = d.content_safety || {};
+    const ts = d.tone_and_style || {};
+    const safetyBits = [];
+    if (safety.no_real_faces) safetyBits.push("بدون وجوه حقيقية");
+    if (safety.no_graphic_violence || safety.no_gore) safetyBits.push("بدون عنف صادم");
+    if (safety.respect_victims) safetyBits.push("احترام الضحايا");
+    el.innerHTML = [
+      '<div class="scene-title">' + _lfEscHtml(d.title || "بدون عنوان") + '</div>',
+      '<div class="scene-meta">الفقرات: ' + (d.paragraphs || []).length + ' · إجمالي الكلمات: ~' + totalWords + ' · مشاهد متوقّعة: ~' + estScenes + ' · مدة تقديرية: ~' + estMin + ' دقيقة</div>',
+      '<div class="scene-meta">طول المشهد: ' + s.sceneSeconds + ' ث × ' + s.wordsPerSec + ' كلمة/ث = ~' + s.targetWords + ' كلمة/مشهد</div>',
+      ts.narration_style || ts.voice_direction ? ('<div class="scene-meta">النبرة: ' + _lfEscHtml(ts.narration_style || "") + (ts.voice_direction ? (' — ' + _lfEscHtml(ts.voice_direction)) : "") + '</div>') : '',
+      safetyBits.length ? ('<div class="scene-meta">أمان: ' + safetyBits.join(" · ") + '</div>') : ''
+    ].join("");
+  }
+  function renderLongformExtras() {
+    const el = document.getElementById("longformExtras");
+    if (!el) return;
+    const d = longformSource.data;
+    if (!d) { el.innerHTML = ""; return; }
+    const parts = [];
+    const ym = d.youtube_metadata || {};
+    if (ym.youtube_title || ym.youtube_description) {
+      parts.push('<div class="card"><div class="card-body">');
+      parts.push('<h3 class="section-title" style="font-size:1rem;">ميتاداتا يوتيوب</h3>');
+      if (ym.youtube_title) parts.push('<div class="field"><label>العنوان</label><input type="text" readonly value="' + _lfEscHtml(ym.youtube_title) + '"></div>');
+      if (ym.youtube_description) parts.push('<div class="field"><label>الوصف</label><textarea readonly style="min-height:90px;">' + _lfEscHtml(ym.youtube_description) + '</textarea></div>');
+      if (Array.isArray(ym.hashtags) && ym.hashtags.length) parts.push('<div class="scene-meta">' + ym.hashtags.map(_lfEscHtml).join(" ") + '</div>');
+      parts.push('</div></div>');
+    }
+    if (Array.isArray(d.thumbnail_concepts) && d.thumbnail_concepts.length) {
+      parts.push('<div class="card" style="margin-top:10px;"><div class="card-body">');
+      parts.push('<h3 class="section-title" style="font-size:1rem;">أفكار الغلاف (برومبتات جاهزة)</h3>');
+      d.thumbnail_concepts.forEach(function (t, i) {
+        parts.push('<div class="field"><label>' + (i + 1) + '. ' + _lfEscHtml(t.concept || "") + (t.text_on_thumbnail ? (' — نص الغلاف: ' + _lfEscHtml(t.text_on_thumbnail)) : "") + '</label><textarea readonly style="min-height:60px;direction:ltr;">' + _lfEscHtml(t.visual_prompt || "") + '</textarea></div>');
+      });
+      parts.push('</div></div>');
+    }
+    el.innerHTML = parts.join("");
+  }
+  function getLongformBibleInstruction(d) {
+    const ts = d.tone_and_style || {};
+    const safety = d.content_safety || {};
+    const prod = d.production_notes || {};
+    const thumbs = (d.thumbnail_concepts || []).map(function (t) { return t.visual_prompt; }).filter(Boolean).join(" || ");
+    return [
+      "You are a visual continuity director for a documentary-style video. Build a VISUAL BIBLE in JSON only (no markdown).",
+      "Project title: \"" + (d.title || "") + "\". Country/setting: " + (d.country_focus || "") + ". Language: Arabic.",
+      "Story summary: " + (d.story_summary || ""),
+      "Visual direction (MUST follow): " + (ts.visual_direction || ""),
+      "Production visual style: " + (prod.visual_style || "") + ". Thumbnail mood: " + (prod.thumbnail_style || "") + ".",
+      "Reference symbolic prompts from thumbnails (reuse their mood and recurring objects): " + thumbs,
+      "CONTENT SAFETY (HARD RULES — encode them explicitly into visual_identity AND continuity_rules): "
+        + (safety.no_real_faces ? "NEVER show real or identifiable human faces (faceless, from behind, silhouettes, symbolic objects only). " : "")
+        + (safety.no_graphic_violence ? "No graphic violence. " : "")
+        + (safety.no_gore ? "No gore or blood. " : "")
+        + (safety.respect_victims ? "Respect the victim; no exploitation. " : "")
+        + (safety.avoid_defamation ? "No real names or brand logos visible; avoid defamation. " : ""),
+      "Define recurring SYMBOLIC motifs for cross-scene consistency (e.g. a lonely car at night, an empty driver seat, a glowing phone on a seat, an incomplete map route, a closed investigation file, a distant streetlamp, a courthouse), a FIXED color palette, and a FIXED cinematic style so every generated image looks like the same film.",
+      "Return EXACTLY this JSON shape: {\"main_character_profile\":\"\",\"supporting_cast\":\"\",\"world_rules\":\"\",\"visual_identity\":\"\",\"continuity_rules\":\"\",\"narrative_goal\":\"\"}"
+    ].join(" ");
+  }
+  function getLongformSplitInstruction(paragraphText, targetWords) {
+    const minW = Math.max(3, Math.round(targetWords * 0.8));
+    const maxW = Math.round(targetWords * 1.2);
+    return [
+      "You split an Arabic narration PARAGRAPH into sequential scenes for a video. VERBATIM MODE.",
+      "ABSOLUTE RULES: Use the EXACT original words. Do NOT rewrite, paraphrase, summarize, translate, add, correct, or remove any word. Your ONLY job is to insert split points.",
+      "Split ONLY at natural sentence or strong-clause boundaries (after a period, question mark, or a strong comma).",
+      "Target about " + targetWords + " words per scene (acceptable range " + minW + "-" + maxW + "). A scene MAY exceed the range if a single sentence is longer, but NEVER cut a sentence in the middle.",
+      "Keep the original order. Cover the ENTIRE paragraph with no omissions and no additions. Concatenating all scene narrations in order MUST reproduce the original paragraph text exactly (whitespace aside).",
+      "For each scene write a very short Arabic title (2-4 words).",
+      "Return valid JSON ONLY, no markdown, escape double quotes inside strings.",
+      "Return exactly: {\"scenes\":[{\"title\":\"\",\"narration\":\"\"}]}",
+      "PARAGRAPH:",
+      paragraphText
+    ].join("\n");
+  }
+  async function splitLongformParagraphs(d, targetWords, status) {
+    const paragraphs = (d.paragraphs || []).map(function (p) { return String(p || "").trim(); }).filter(Boolean);
+    const allScenes = [];
+    for (let i = 0; i < paragraphs.length; i++) {
+      throwIfStopRequested();
+      const msg = "تقطيع حرفي: فقرة " + (i + 1) + " / " + paragraphs.length + "...";
+      if (status) status.textContent = msg;
+      setLongformStatus(msg);
+      let scenes = [];
+      try {
+        const parsed = safeParseJson(await generateTextWithGemini(getLongformSplitInstruction(paragraphs[i], targetWords), "light"));
+        scenes = Array.isArray(parsed.scenes) ? parsed.scenes : [];
+      } catch (e) { scenes = []; }
+      if (!scenes.length) scenes = [{ title: "مشهد", narration: paragraphs[i] }];
+      scenes.forEach(function (sc) {
+        const narration = normalizeText(sc.narration || "");
+        if (!narration) return;
+        allScenes.push({ title: normalizeText(sc.title || "مشهد"), narration: narration });
+      });
+    }
+    return allScenes;
+  }
+  async function buildPhaseOneFromJson() {
+    const d = longformSource.data;
+    if (!d) { alert("ارفع ملف JSON صالح أولًا."); return false; }
+    const s = getLongformSettings();
+    const status = document.getElementById("pipelineStatus");
+    setCurrentPhase("مشروع جاهز — التقطيع");
+    setStage("concept", "loading", "تجهيز الفكرة من الـ JSON...");
+    setStage("bible", "loading", "بناء الهوية البصرية من اتجاه الصورة وقيود الأمان...");
+    setStage("story", "loading", "تجهيز نص السرد...");
+    setStage("scenes", "loading", "تقطيع حرفي حسب طول المشهد...");
+    setLongformStatus("بدأ تجهيز المشروع الجاهز...");
+    const ts = d.tone_and_style || {};
+    const safety = d.content_safety || {};
+    let bible = {};
+    try { bible = safeParseJson(await generateTextWithGemini(getLongformBibleInstruction(d), "light")); } catch (e) { bible = {}; }
+    if (!bible || typeof bible !== "object") bible = {};
+    if (!bible.visual_identity) bible.visual_identity = (ts.visual_direction || "dark cinematic, symbolic visuals only") + (safety.no_real_faces ? ", no real or identifiable faces" : "");
+    if (!bible.continuity_rules) bible.continuity_rules = "Consistent dark cinematic documentary style; recurring symbolic motifs; " + (safety.no_real_faces ? "never show identifiable faces; " : "") + (safety.no_gore ? "no gore; " : "") + "fixed color palette across all scenes.";
+    if (!bible.main_character_profile) bible.main_character_profile = "Anonymous, faceless symbolic subject (never identifiable); represented through symbolic objects rather than a real person.";
+    setStage("bible", "ok", "تم بناء الهوية البصرية وقيود الأمان.");
+    throwIfStopRequested();
+    const scenes = await splitLongformParagraphs(d, s.targetWords, status);
+    if (!scenes.length) { setStage("scenes", "fail", "فشل التقطيع."); return false; }
+    scenes.forEach(function (sc, idx) {
+      sc.scene_number = idx + 1;
+      sc.duration_seconds = Math.max(3, Math.round(_lfCountWords(sc.narration) / s.wordsPerSec));
+    });
+    const fullStory = scenes.map(function (sc) { return sc.narration; }).join(" ");
+    const langMap = { ar: "Arabic", en: "English", fr: "French", es: "Spanish", de: "German", tr: "Turkish" };
+    const language = langMap[(d.language || "ar")] || "Arabic";
+    const concept = {
+      title: d.title || "مشروع جاهز",
+      language: language,
+      era: d.country_focus ? (d.country_focus + " — معاصر") : "معاصر",
+      genre: (d.project_type && /crime/i.test(d.project_type)) ? "True Crime Documentary" : "Documentary",
+      narrator_persona: ts.voice_direction || "calm, serious documentary narrator",
+      logline: d.intro_hook || "",
+      tone: ts.pace || ts.narration_style || "",
+      world: d.country_focus || "",
+      core_conflict: d.story_summary || "",
+      writing_style: ts.narration_style || "",
+      audience_selected: "عام / محبو الجرائم الحقيقية"
+    };
+    phaseOneProject = {
+      title: concept.title,
+      language: language,
+      dialect: "Modern Standard Arabic (فصحى)",
+      era: concept.era,
+      genre: concept.genre,
+      narratorPersona: concept.narrator_persona,
+      audienceSelected: concept.audience_selected,
+      concept: concept,
+      bible: {
+        main_character_profile: bible.main_character_profile || "",
+        supporting_cast: bible.supporting_cast || "",
+        world_rules: bible.world_rules || "",
+        visual_identity: bible.visual_identity || "",
+        continuity_rules: bible.continuity_rules || "",
+        narrative_goal: bible.narrative_goal || (d.story_summary || "")
+      },
+      story: { story_summary: d.story_summary || "", full_story: fullStory },
+      scenes: scenes
+    };
+    setStage("concept", "ok", concept.logline || "تم تجهيز الفكرة.");
+    setStage("story", "ok", "تم تجهيز نص السرد (" + _lfCountWords(fullStory) + " كلمة).");
+    setStage("scenes", "ok", "تم التقطيع إلى " + scenes.length + " مشهد.");
+    document.getElementById("bibleOutput").textContent = [
+      "Main Character Profile:\n" + phaseOneProject.bible.main_character_profile,
+      "\nVisual Identity:\n" + phaseOneProject.bible.visual_identity,
+      "\nContinuity Rules:\n" + phaseOneProject.bible.continuity_rules,
+      "\nNarrative Goal:\n" + phaseOneProject.bible.narrative_goal
+    ].join("\n");
+    document.getElementById("storyOutput").textContent = fullStory;
+    renderSummary();
+    renderSceneList();
+    try {
+      setLongformStatus("تجهيز أسلوب التعليق الصوتي...");
+      const ttsResult = await generateTtsStylePrompt(phaseOneProject, { audience: concept.audience_selected, narrator: concept.narrator_persona });
+      projectTtsStyle = ttsResult.style || ("Read in a " + (ts.voice_direction || "calm serious") + " documentary voice:");
+      projectTtsVoice = ttsResult.voice || "";
+      document.getElementById("audioStylePrefixInput").value = projectTtsStyle;
+    } catch (e) {
+      projectTtsStyle = "Read in a calm, deep, serious documentary voice:";
+      projectTtsVoice = "";
+      document.getElementById("audioStylePrefixInput").value = projectTtsStyle;
+    }
+    ["longformProductionBtn", "longformAssetsBtn", "longformAudioBtn"].forEach(function (id) { const b = document.getElementById(id); if (b) b.disabled = false; });
+    document.getElementById("runProductionBtn").disabled = false;
+    setLongformStatus("تم تقطيع " + scenes.length + " مشهد. جاهز للإنتاج.");
+    return true;
+  }
+  async function runLongformPhaseOne(options = {}) {
+    options = options || {};
+    if (!longformSource.data) { alert("ارفع ملف JSON صالح أولًا."); return false; }
+    if (!options.managedByRunAll) { clearStopRequest(); beginManagedOperation(); resetProject(); }
+    const runAll = document.getElementById("longformRunAllBtn");
+    const p1 = document.getElementById("longformPhaseOneBtn");
+    if (runAll) runAll.disabled = true;
+    if (p1) p1.disabled = true;
+    try {
+      const ok = await buildPhaseOneFromJson();
+      if (ok && !options.managedByRunAll) { autoCollapseCards(["longform-import"]); switchToTab("story"); }
+      return ok;
+    } catch (e) {
+      if (isStopError(e)) { setLongformStatus("تم إيقاف التقطيع يدويًا."); }
+      else { console.error(e); setLongformStatus("حدث خطأ أثناء التقطيع. تحقق من إعدادات Gemini."); }
+      return false;
+    } finally {
+      if (runAll) runAll.disabled = false;
+      if (p1) p1.disabled = false;
+      if (!options.managedByRunAll) endManagedOperation();
+    }
+  }
+  async function runLongformFullPipeline() {
+    if (!longformSource.data) { alert("ارفع ملف JSON صالح أولًا."); return; }
+    const input = getProjectInput();
+    clearStopRequest();
+    beginManagedOperation();
+    resetProject();
+    setPipelineButtonsDisabled(true);
+    const runAll = document.getElementById("longformRunAllBtn");
+    const p1 = document.getElementById("longformPhaseOneBtn");
+    if (runAll) runAll.disabled = true;
+    if (p1) p1.disabled = true;
+    setCurrentPhase("مشروع جاهز — تشغيل الكل");
+    setLongformStatus("بدأ تشغيل كل المراحل من ملف JSON...");
+    try {
+      const phaseOk = await runLongformPhaseOne({ managedByRunAll: true });
+      if (!phaseOk) { setLongformStatus(stopRequested ? "تم الإيقاف أثناء التقطيع." : "توقف عند التقطيع."); return; }
+      const productionOk = await runProductionPipeline({ managedByRunAll: true });
+      if (!productionOk) { setLongformStatus(stopRequested ? "تم الإيقاف أثناء الإنتاج." : "توقف عند الإنتاج."); return; }
+      const skipImages = input.skipImageStage && input.audioEnabled;
+      if (skipImages) {
+        prepareAssetsPlaceholders();
+        setLongformStatus("تم تخطّي الصور — توليد الصوت أولًا للمراجعة...");
+        const audioOk = await runAudioPipeline({ managedByRunAll: true });
+        if (!audioOk) { setLongformStatus(stopRequested ? "تم الإيقاف أثناء الصوت." : "فشلت مرحلة الصوت."); return; }
+        setCurrentPhase("الصوت جاهز — بانتظار الصور");
+        setLongformStatus("اكتمل الصوت. اضغط «3) الصور» لتوليد الصور.");
+        return;
+      }
+      const assetsOk = await runAssetsPipeline({ managedByRunAll: true });
+      if (!assetsOk) { setLongformStatus(stopRequested ? "تم الإيقاف أثناء الصور." : "توقف عند الصور."); return; }
+      if (input.audioEnabled) {
+        const audioOk = await runAudioPipeline({ managedByRunAll: true });
+        if (!audioOk) { setLongformStatus(stopRequested ? "تم الإيقاف أثناء الصوت." : "فشلت مرحلة الصوت."); return; }
+      }
+      setCurrentPhase("اكتمل المشروع");
+      setLongformStatus("اكتمل تشغيل كل المراحل من المشروع الجاهز بنجاح.");
+    } finally {
+      setPipelineButtonsDisabled(false);
+      document.getElementById("downloadProjectBtn").disabled = !phaseOneProject;
+      if (runAll) runAll.disabled = false;
+      if (p1) p1.disabled = false;
+      endManagedOperation();
+    }
+  }
+
   // تنقل التبويبات + صفحة الإعدادات
   function switchToTab(tid) {
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === tid));
@@ -3405,6 +3749,7 @@
   syncAudioModeUi();
   populateStandaloneAudioVoiceOptions();
   copyMainAudioSettingsToStandalone();
+  loadLongformSettings();
   initializeCards();
   resetProject();
   resetStandaloneAudioStudio();

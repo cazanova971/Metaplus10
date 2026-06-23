@@ -165,7 +165,7 @@
       </aside>
       <main>
         <div class="stack">
-<div class="tabs"><button class="tab active" data-tab="story" onclick="switchToTab('story')">القصة</button><button class="tab" data-tab="production" onclick="switchToTab('production')">الإنتاج</button><button class="tab" data-tab="media" onclick="switchToTab('media')">الصور والصوت</button><button class="tab" data-tab="styletest" onclick="switchToTab('styletest')">اختبار الاستايلات</button><button class="tab" data-tab="standalone" onclick="switchToTab('standalone')">استوديو الصوت</button></div>
+<div class="tabs"><button class="tab active" data-tab="story" onclick="switchToTab('story')">القصة</button><button class="tab" data-tab="longform" onclick="switchToTab('longform')">مشروع جاهز</button><button class="tab" data-tab="production" onclick="switchToTab('production')">الإنتاج</button><button class="tab" data-tab="media" onclick="switchToTab('media')">الصور والصوت</button><button class="tab" data-tab="styletest" onclick="switchToTab('styletest')">اختبار الاستايلات</button><button class="tab" data-tab="standalone" onclick="switchToTab('standalone')">استوديو الصوت</button></div>
 <div class="panel-view active" id="view-story">
 <div class="card" data-card-key="phase-1-progress">
             <div class="card-header">
@@ -495,6 +495,39 @@
             </div>
           </div>
 </div>
+<div class="panel-view" id="view-longform">
+<div class="card" data-card-key="longform-import">
+            <div class="card-header">
+              <h2 class="section-title">مشروع جاهز (JSON)</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('longform-import')">
+                <span id="card-toggle-icon-longform-import" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-longform-import">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-longform-import" class="card-body">
+              <div class="helper-box">
+                ارفع ملف <code>JSON</code> منظّم (لازم يحتوي <code>paragraphs</code> + <code>title</code>) مُخرَج من سكربتك. الأداة تقسّم السرد لمشاهد <b>حرفيًا</b> حسب طول المشهد في الإعدادات، تبني هوية بصرية من اتجاه الصورة وقيود الأمان، وتستخدم كل أدوات الموقع (إنتاج / صور / صوت). اضبط <b>مدة المشهد</b> و<b>سرعة السرد</b> من صفحة الإعدادات (الترس).
+              </div>
+              <div class="upload-box">
+                <div class="field">
+                  <label for="longformJsonInput">ملف المشروع (JSON)</label>
+                  <input type="file" id="longformJsonInput" accept=".json" onchange="handleLongformJsonFile(event)">
+                </div>
+                <div id="longformFileMeta" class="file-chip" style="display:none;"></div>
+              </div>
+              <div id="longformPreview" class="hint" style="margin-top:12px;">لم يتم رفع ملف بعد.</div>
+              <div class="toolbar" style="margin-top:14px;">
+                <button id="longformRunAllBtn" class="btn btn-primary" type="button" onclick="runLongformFullPipeline()" disabled>▶ شغّل الكل</button>
+                <button id="longformPhaseOneBtn" class="btn btn-secondary" type="button" onclick="runLongformPhaseOne()" disabled>1) تقطيع من JSON</button>
+                <button id="longformProductionBtn" class="btn btn-secondary" type="button" onclick="runProductionPipeline()" disabled>2) الإنتاج</button>
+                <button id="longformAssetsBtn" class="btn btn-secondary" type="button" onclick="runAssetsPipeline()" disabled>3) الصور</button>
+                <button id="longformAudioBtn" class="btn btn-audio" type="button" onclick="runAudioPipeline()" disabled>4) الصوت</button>
+              </div>
+              <div id="longformStatus" class="status"></div>
+              <div id="longformExtras" style="margin-top:14px;"></div>
+            </div>
+          </div>
+</div>
 </div>
       </main>
     </div>
@@ -511,6 +544,27 @@
       <button class="settings-subtab" data-stab="prompts" type="button" onclick="switchSettingsTab('prompts')">البرومبتات</button>
     </div>
     <div id="settingsTabGeneral">
+<details class="settings-section" open>
+              <summary>
+                <span>إعدادات المشروع الجاهز (JSON)</span>
+                <span class="settings-section-icon">▾</span>
+              </summary>
+              <div class="settings-section-body">
+                <div class="grid-2">
+                  <div class="field">
+                    <label for="longformSceneSecondsInput">مدة المشهد التقريبية (ثانية)</label>
+                    <input type="number" id="longformSceneSecondsInput" min="3" max="180" step="1" value="30" oninput="saveLongformSettings()">
+                  </div>
+                  <div class="field">
+                    <label for="longformWordsPerSecInput">سرعة السرد (كلمة/ثانية)</label>
+                    <input type="number" id="longformWordsPerSecInput" min="0.5" max="6" step="0.1" value="2.5" oninput="saveLongformSettings()">
+                  </div>
+                </div>
+                <div class="helper-box">
+                  كل مشهد ≈ <b id="longformWordsPerSceneHint">75</b> كلمة (مدة المشهد × سرعة السرد). التقطيع حرفي عند أقرب حدود جُمَل — لا يغيّر الكلام. الافتراضي 30 ثانية ≈ 2.5 كلمة/ث.
+                </div>
+              </div>
+            </details>
 <details class="settings-section" open>
               <summary>
                 <span>إعدادات الصور</span>
