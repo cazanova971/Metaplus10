@@ -1,0 +1,46 @@
+<!-- ════════════════════════════════════════════════════════════════
+  اختبار CSP لـ jsDelivr على Perchance
+  الصق كل هذا في محرّر HTML بتاع Perchance (لوحة اليمين) في مولّد فارغ/تجريبي
+  وانتظر ~3 ثواني، ثم اقرأ النتيجة الظاهرة على الشاشة.
+═════════════════════════════════════════════════════════════════ -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@4/animate.min.css">
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+<div id="probe" class="animate__animated animate__bounce" style="position:absolute;left:-9999px;top:-9999px;">x</div>
+<div id="cspReport" style="font-family:Arial,sans-serif;font-size:19px;line-height:2.1;padding:24px;direction:rtl;color:#1d2126;">⏳ جارٍ اختبار jsDelivr عبر CSP... استنى ٣ ثواني.</div>
+
+<script>
+  setTimeout(function () {
+    var lines = [];
+
+    // 1) JS عبر <script src> من jsDelivr
+    var jsOk = (typeof confetti === "function");
+    lines.push((jsOk ? "✅" : "❌") + " تحميل JS من jsDelivr (script src): " + (jsOk ? "نجح" : "محجوب بـ CSP"));
+
+    // 2) CSS عبر <link> من jsDelivr
+    var an = "";
+    try { an = getComputedStyle(document.getElementById("probe")).animationName || ""; } catch (e) {}
+    var cssOk = (an && an !== "none");
+    lines.push((cssOk ? "✅" : "❌") + " تحميل CSS من jsDelivr (link): " + (cssOk ? "نجح" : "محجوب بـ CSP"));
+
+    var rep = document.getElementById("cspReport");
+
+    // 3) fetch من jsDelivr (للتأكيد — نعرف إنه شغّال للداتا)
+    fetch("https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/package.json", { cache: "no-cache" })
+      .then(function (r) { return r.ok; })
+      .then(function (ok) { lines.push((ok ? "✅" : "❌") + " fetch من jsDelivr: " + (ok ? "نجح" : "فشل")); finish(); })
+      .catch(function (e) { lines.push("❌ fetch من jsDelivr: فشل (" + (e && e.message) + ")"); finish(); });
+
+    function finish() {
+      lines.push("&nbsp;");
+      if (jsOk && cssOk) {
+        lines.push("🎉 <b>النتيجة: jsDelivr مسموح بالكامل</b> — نقدر نفصل CSS والكود على GitHub.");
+      } else if (jsOk || cssOk) {
+        lines.push("⚠️ <b>النتيجة: جزئي</b> — راجع أي سطر فشل أعلاه.");
+      } else {
+        lines.push("⛔ <b>النتيجة: CSP يحجب سكربتات/روابط jsDelivr</b> — نكتفي بـ fetch (داتا فقط زي البرومبتات).");
+      }
+      rep.innerHTML = lines.join("<br>");
+    }
+  }, 3000);
+</script>

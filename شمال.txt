@@ -1,0 +1,15 @@
+t2i = {import:text-to-image-plugin}
+generateText = {import:ai-text-plugin}
+
+qualityBooster
+  masterpiece, best quality, ultra detailed, crisp details, cinematic lighting, polished render, clean anatomy, strong composition, rich atmosphere, high fidelity
+
+storyNegative
+  low quality, blurry, text, watermark, logo, signature, cropped, bad anatomy, deformed face, extra fingers, duplicate subject, cluttered composition, flat lighting
+
+motionSafety
+  preserve character identity, preserve wardrobe consistency, preserve face consistency, no new objects, no scene jump, no text overlay, smooth motion only
+
+quality_ref = [qualityBooster]
+negative_ref = [storyNegative]
+motion_safety_ref = [motionSafety]

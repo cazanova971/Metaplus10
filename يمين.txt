@@ -1,0 +1,754 @@
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/cazanova971/Metaplus10@main/style.css">
+<div class="page">
+  <section class="hero">
+    <div class="hero-row"><h1 style="margin:0;"><span class="hero-title">استوديو القصة الذكي</span></h1><button class="gear-btn" type="button" onclick="openSettings()">⚙ الإعدادات المتقدمة</button></div>
+  </section>
+  <section class="panel">
+    <div class="layout">
+      <aside>
+        <div class="card">
+          <div class="card-header">
+            <h2 class="section-title">بداية المشروع</h2>
+          </div>
+          <div class="card-body">
+            <details class="settings-section" open>
+              <summary>
+                <span>إعدادات القصة</span>
+                <span class="settings-section-icon">▾</span>
+              </summary>
+              <div class="settings-section-body">
+                <div class="field">
+                  <label for="storyTitleInput">عنوان القصة</label>
+                  <input type="text" id="storyTitleInput" placeholder="مثال: بوابة الرمل الأخيرة">
+                </div>
+                <div class="field">
+                  <label for="storyHookInput">فكرة قصيرة اختيارية</label>
+                  <textarea id="storyHookInput" placeholder="مثال: شاب يكتشف ساعة قديمة تنقله بين أزمنة متداخلة ويبحث عن أخته المفقودة"></textarea>
+                </div>
+                <div class="field" style="grid-column: 1 / -1;">
+                  <div class="toggle-row" style="margin-bottom:8px;">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="ownStoryToggle" onchange="syncOwnStoryUi()">
+                      <span class="slider"></span>
+                    </label>
+                    <label for="ownStoryToggle">عندي قصتي الخاصة — ارفع ملفًا نصيًا وأكمل منه</label>
+                  </div>
+                  <div id="ownStoryBox" style="display:none;">
+                    <div class="grid-2">
+                      <div class="field">
+                        <label for="ownStoryFileInput">ملف القصة أو المقال (txt)</label>
+                        <input type="file" id="ownStoryFileInput" accept=".txt" onchange="handleOwnStoryFile(event)">
+                      </div>
+                      <div class="field">
+                        <label for="ownStoryModeSelect">طريقة المعالجة</label>
+                        <select id="ownStoryModeSelect">
+                          <option value="enhance" selected>تحسين — إعادة صياغة سينمائية</option>
+                          <option value="verbatim">حفاظ حرفي — تقسيم بدون تغيير</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div id="ownStoryStatus" class="auto-creative-note" style="display:none;"></div>
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label for="storyLanguageSelect">لغة القصة</label>
+                    <select id="storyLanguageSelect" onchange="updateDialectOptions()">
+                      <option value="Arabic" selected>العربية</option>
+                      <option value="English">English</option>
+                      <option value="French">Français</option>
+                      <option value="Spanish">Español</option>
+                      <option value="German">Deutsch</option>
+                      <option value="Turkish">Türkçe</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="dialectSelect">اللهجة / الرجستر</label>
+                    <select id="dialectSelect"></select>
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field" style="grid-column: 1 / -1;">
+                    <div class="toggle-row" style="margin-bottom:8px;">
+                      <label class="toggle-switch">
+                        <input type="checkbox" id="creativeAutoToggle" onchange="syncCreativeControlUi()" checked>
+                        <span class="slider"></span>
+                      </label>
+                      <label for="creativeAutoToggle">دع Gemini يختار نوع القصة وشخصية الراوي تلقائيًا</label>
+                    </div>
+                    <div id="creativeAutoNote" class="auto-creative-note" style="display:none;">
+                      عند التفعيل سيختار Gemini أفضل نوع قصة وأفضل شخصية راوٍ من القوائم الحالية بناءً على العنوان والفكرة.
+                    </div>
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label for="storyGenreSelect">نوع القصة</label>
+                    <select id="storyGenreSelect">
+                      <option value="Adventure" selected>Adventure</option>
+                      <option value="Fantasy">Fantasy</option>
+                      <option value="Sci-Fi">Sci-Fi</option>
+                      <option value="Drama">Drama</option>
+                      <option value="Mystery">Mystery</option>
+                      <option value="Romance">Romance</option>
+                      <option value="Horror">Horror</option>
+                      <option value="Islamic">Islamic / ديني</option>
+                      <option value="Historical">Historical / تاريخي</option>
+                      <option value="Comedy">Comedy / كوميدي</option>
+                      <option value="Educational">Educational / تعليمي</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="narratorSelect">شخصية الراوي</label>
+                    <select id="narratorSelect">
+                      <option value="راوي قصص محترف" selected>راوي قصص محترف</option>
+                      <option value="خبر تقني">خبر تقني</option>
+                      <option value="معلم صبور">معلم صبور</option>
+                      <option value="صديق مقرب">صديق مقرب</option>
+                      <option value="مدرب تحفيزي">مدرب تحفيزي</option>
+                      <option value="محلل اقتصادي">محلل اقتصادي</option>
+                      <option value="ناقد ساخر">ناقد ساخر</option>
+                      <option value="باحث تاريخي">باحث تاريخي</option>
+                      <option value="خبير لغة جسد">خبير لغة جسد</option>
+                      <option value="رائد أعمال">رائد أعمال</option>
+                      <option value="مذيع أخبار">مذيع أخبار</option>
+                      <option value="فيلسوف معاصر">فيلسوف معاصر</option>
+                      <option value="محقق جنائي">محقق جنائي</option>
+                      <option value="طبيب مختص">طبيب مختص</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="audienceSelect">الجمهور المستهدف</label>
+                  <select id="audienceSelect">
+                    <option value="auto" selected>تلقائي (Gemini يختار)</option>
+                    <option value="عامة الناس">عامة الناس</option>
+                    <option value="مبتدئين">مبتدئين</option>
+                    <option value="خبراء">خبراء</option>
+                    <option value="أطفال">أطفال</option>
+                    <option value="رواد أعمال">رواد أعمال</option>
+                    <option value="محبي التقنية">محبي التقنية</option>
+                    <option value="محبي الغموض">محبي الغموض</option>
+                    <option value="طلاب العلم">طلاب العلم</option>
+                    <option value="صناع المحتوى">صناع المحتوى</option>
+                    <option value="جيل زد (Gen Z)">جيل زد (Gen Z)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="wordCountInput">عدد كلمات القصة</label>
+                  <input type="number" id="wordCountInput" value="300" min="50" max="5000" step="50">
+                </div>
+              </div>
+            </details>
+            
+            
+            
+            
+            <div id="aiProviderStatus" class="status"></div>
+            <div class="toolbar sticky-toolbar">
+              <button id="runAllBtn" class="btn btn-primary" onclick="runFullPipeline()">تشغيل<br>كل المراحل</button>
+              <button id="runResumeBtn" class="btn btn-secondary" onclick="resumeRemainingPipeline()">استكمال<br>المراحل</button>
+              <button id="runPipelineBtn" class="btn btn-primary phase-number-btn" onclick="runStoryPipeline()"><span class="phase-num">1</span><span class="phase-label">مرحلة القصة</span></button>
+              <button id="runProductionBtn" class="btn btn-secondary phase-number-btn" onclick="runProductionPipeline()" disabled><span class="phase-num">2</span><span class="phase-label">مرحلة الإنتاج</span></button>
+              <button id="runAssetsBtn" class="btn btn-secondary phase-number-btn" onclick="runAssetsPipeline()" disabled><span class="phase-num">3</span><span class="phase-label">مرحلة الصور</span></button>
+              <button id="runAudioBtn" class="btn btn-audio phase-number-btn" onclick="runAudioPipeline()" disabled><span class="phase-num">4</span><span class="phase-label">مرحلة الصوت</span></button>
+              <button class="btn btn-secondary" type="button" onclick="scrollToStandaloneAudioStudio()">استوديو الصوت<br>المستقل</button>
+              <button id="downloadProjectBtn" class="btn btn-secondary" onclick="downloadProjectBundle()" disabled>تحميل المشروع<br>كامل</button>
+              <button class="btn btn-ghost" onclick="resetProject()">مسح<br>المشروع</button>
+            </div>
+            <div id="pipelineStatus" class="status"></div>
+          </div>
+        </div>
+      </aside>
+      <main>
+        <div class="stack">
+<div class="tabs"><button class="tab active" data-tab="story" onclick="switchToTab('story')">القصة</button><button class="tab" data-tab="production" onclick="switchToTab('production')">الإنتاج</button><button class="tab" data-tab="media" onclick="switchToTab('media')">الصور والصوت</button><button class="tab" data-tab="styletest" onclick="switchToTab('styletest')">اختبار الاستايلات</button><button class="tab" data-tab="standalone" onclick="switchToTab('standalone')">استوديو الصوت</button></div>
+<div class="panel-view active" id="view-story">
+<div class="card" data-card-key="phase-1-progress">
+            <div class="card-header">
+              <h2 class="section-title">تقدم المرحلة الأولى</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('phase-1-progress')">
+                <span id="card-toggle-icon-phase-1-progress" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-phase-1-progress">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-phase-1-progress" class="card-body">
+              <div class="stage-grid">
+                <div class="stage-card">
+                  <span id="badge-concept" class="badge">بانتظار</span>
+                  <h3>1. الفكرة الأساسية</h3>
+                  <p id="desc-concept">صياغة اتجاه القصة وعالمها الأولي.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-bible" class="badge">بانتظار</span>
+                  <h3>2. Story Bible</h3>
+                  <p id="desc-bible">بناء الشخصية الرئيسية وقواعد العالم ونبرة السرد.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-story" class="badge">بانتظار</span>
+                  <h3>3. القصة الكاملة</h3>
+                  <p id="desc-story">توليد النص الكامل للقصة.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-scenes" class="badge">بانتظار</span>
+                  <h3>4. تقسيم المشاهد</h3>
+                  <p id="desc-scenes">تقسيم القصة إلى مشاهد قصيرة جاهزة للمرحلة التالية.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+<div class="card" data-card-key="project-summary">
+            <div class="card-header">
+              <h2 class="section-title">ملخص المشروع</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('project-summary')">
+                <span id="card-toggle-icon-project-summary" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-project-summary">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-project-summary" class="card-body">
+              <div class="summary-grid">
+                <div class="summary-item">
+                  <strong>العنوان</strong>
+                  <span id="summaryTitle">-</span>
+                </div>
+                <div class="summary-item">
+                  <strong>اللغة / اللهجة</strong>
+                  <span id="summaryLanguage">-</span>
+                </div>
+                <div class="summary-item">
+                  <strong>الزمن</strong>
+                  <span id="summaryEra">-</span>
+                </div>
+                <div class="summary-item">
+                  <strong>المشاهد</strong>
+                  <span id="summaryScenes">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+<div class="card" data-card-key="story-bible">
+            <div class="card-header">
+              <h2 class="section-title">Story Bible</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('story-bible')">
+                <span id="card-toggle-icon-story-bible" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-story-bible">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-story-bible" class="card-body">
+              <div id="bibleOutput" class="output-box">سيظهر هنا ملف الهوية السردية والشخصية الرئيسية بعد اكتمال هذه المرحلة.</div>
+            </div>
+          </div>
+<div class="card" data-card-key="full-story">
+            <div class="card-header">
+              <h2 class="section-title">القصة الكاملة</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('full-story')">
+                <span id="card-toggle-icon-full-story" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-full-story">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-full-story" class="card-body">
+              <div id="storyOutput" class="output-box">سيظهر هنا نص القصة الكامل بعد التوليد.</div>
+            </div>
+          </div>
+<div class="card" data-card-key="scene-list-card">
+            <div class="card-header">
+              <h2 class="section-title">المشاهد</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('scene-list-card')">
+                <span id="card-toggle-icon-scene-list-card" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-scene-list-card">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-scene-list-card" class="card-body">
+              <div id="sceneList" class="scene-list">
+                <div class="hint">ستظهر قائمة المشاهد هنا فور اكتمال مرحلة التقسيم.</div>
+              </div>
+            </div>
+          </div>
+</div>
+<div class="panel-view" id="view-production">
+<div class="card" data-card-key="phase-2-progress">
+            <div class="card-header">
+              <h2 class="section-title">تقدم المرحلة الثانية</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('phase-2-progress')">
+                <span id="card-toggle-icon-phase-2-progress" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-phase-2-progress">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-phase-2-progress" class="card-body">
+              <div class="stage-grid-2">
+                <div class="stage-card">
+                  <span id="badge-pack" class="badge">بانتظار</span>
+                  <h3>5. Scene Packs</h3>
+                  <p id="desc-pack">بناء ملفات إنتاج لكل مشهد.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-visual" class="badge">بانتظار</span>
+                  <h3>6. Visual Prompts</h3>
+                  <p id="desc-visual">صياغة برومبتات الصور لكل مشهد.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-motion" class="badge">بانتظار</span>
+                  <h3>7. Motion Prompts</h3>
+                  <p id="desc-motion">صياغة برومبتات الحركة لكل مشهد.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-continuity" class="badge">بانتظار</span>
+                  <h3>8. Continuity Notes</h3>
+                  <p id="desc-continuity">تثبيت الاستمرارية بين المشاهد.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+<div class="card" data-card-key="production-card">
+            <div class="card-header">
+              <h2 class="section-title">Scene Production Packs</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('production-card')">
+                <span id="card-toggle-icon-production-card" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-production-card">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-production-card" class="card-body">
+              <div id="productionList" class="scene-list">
+                <div class="hint">ستظهر هنا حزمة الإنتاج لكل مشهد بعد اكتمال المرحلة الثانية.</div>
+              </div>
+            </div>
+          </div>
+</div>
+<div class="panel-view" id="view-media">
+<div class="card" data-card-key="phase-3-progress">
+            <div class="card-header">
+              <h2 class="section-title">تقدم المرحلة الثالثة</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('phase-3-progress')">
+                <span id="card-toggle-icon-phase-3-progress" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-phase-3-progress">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-phase-3-progress" class="card-body">
+              <div class="stage-grid-3">
+                <div class="stage-card">
+                  <span id="badge-images" class="badge">بانتظار</span>
+                  <h3>9. Scene Images</h3>
+                  <p id="desc-images">توليد صورة فعلية لكل مشهد.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-motion-files" class="badge">بانتظار</span>
+                  <h3>10. Motion Files</h3>
+                  <p id="desc-motion-files">تجهيز ملف الحركة النهائي لكل مشهد عبر Gemini.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-preview" class="badge">بانتظار</span>
+                  <h3>11. Asset Preview</h3>
+                  <p id="desc-preview">عرض معاينة الأصول المنتجة داخل الواجهة.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-export" class="badge">بانتظار</span>
+                  <h3>12. Export Bundle</h3>
+                  <p id="desc-export">تجهيز حزمة المشروع النهائية للتنزيل.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+<div class="card" data-card-key="phase-4-progress" id="phase4Card" style="display:none;">
+            <div class="card-header">
+              <h2 class="section-title">تقدم المرحلة الرابعة — توليد الصوت</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('phase-4-progress')">
+                <span id="card-toggle-icon-phase-4-progress" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-phase-4-progress">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-phase-4-progress" class="card-body">
+              <div class="stage-grid-4">
+                <div class="stage-card">
+                  <span id="badge-audio-queue" class="badge">بانتظار</span>
+                  <h3>13. Audio Queue</h3>
+                  <p id="desc-audio-queue">تجهيز قائمة جمل التعليق الصوتي.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-audio-generate" class="badge">بانتظار</span>
+                  <h3>14. TTS Generation</h3>
+                  <p id="desc-audio-generate">إرسال كل جملة إلى Gemini TTS بالتوازي.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-audio-preview" class="badge">بانتظار</span>
+                  <h3>15. Audio Preview</h3>
+                  <p id="desc-audio-preview">عرض مشغّل الصوت لكل مشهد.</p>
+                </div>
+                <div class="stage-card">
+                  <span id="badge-audio-export" class="badge">بانتظار</span>
+                  <h3>16. Audio Export</h3>
+                  <p id="desc-audio-export">تضمين ملفات WAV في حزمة التنزيل.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+<div class="card" data-card-key="asset-card">
+            <div class="card-header">
+              <h2 class="section-title">Scene Assets</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('asset-card')">
+                <span id="card-toggle-icon-asset-card" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-asset-card">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-asset-card" class="card-body">
+              <div id="fullProjectAudioPreview">
+                <div class="hint">سيظهر هنا مشغّل الصوت الكامل بعد اكتمال توليد المرحلة الرابعة.</div>
+              </div>
+              <div id="assetList" class="asset-grid">
+                <div class="hint">ستظهر هنا الصور وملفات الحركة بعد اكتمال المرحلة الثالثة.</div>
+              </div>
+            </div>
+          </div>
+</div>
+<div class="panel-view" id="view-styletest">
+<div class="card" data-card-key="style-test-card">
+            <div class="card-header">
+              <h2 class="section-title">اختبار الاستايلات</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('style-test-card')">
+                <span id="card-toggle-icon-style-test-card" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-style-test-card">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-style-test-card" class="card-body">
+              <div class="field">
+                <label for="styleTestPromptInput">برومبت الاختبار (امسحه وضع أي وصف للصورة)</label>
+                <textarea id="styleTestPromptInput" style="min-height:70px;direction:ltr;">a lone knight standing on a cliff at sunset, looking over a vast valley, dramatic sky, wide shot</textarea>
+              </div>
+              <div class="field">
+                <label>الاستايلات المراد اختبارها (الكل مفعّل افتراضيًا)</label>
+                <div id="styleTestCheckboxes" class="grid-3"></div>
+              </div>
+              <div class="toolbar">
+                <button class="btn btn-primary" type="button" onclick="runStyleTest()">اختبر الاستايلات</button>
+                <button class="btn btn-ghost" type="button" onclick="toggleAllStyleChecks(true)">تحديد الكل</button>
+                <button class="btn btn-ghost" type="button" onclick="toggleAllStyleChecks(false)">إلغاء الكل</button>
+                <button class="btn btn-secondary" type="button" onclick="useScene1PromptForStyleTest()">استخدم برومبت المشهد 1</button>
+              </div>
+              <div id="styleTestStatus" class="status"></div>
+              <div id="styleTestResults" class="asset-grid">
+                <div class="hint">اكتب برومبت واضغط «اختبر الاستايلات» لتوليد نفس الصورة بكل استايل ثم المقارنة والاختيار.</div>
+              </div>
+            </div>
+          </div>
+</div>
+<div class="panel-view" id="view-standalone">
+<div class="card" data-card-key="standalone-audio-studio">
+            <div class="card-header">
+              <h2 class="section-title">استوديو الصوت المستقل</h2>
+              <button class="card-toggle" type="button" onclick="toggleCard('standalone-audio-studio')">
+                <span id="card-toggle-icon-standalone-audio-studio" class="card-toggle-icon">▾</span>
+                <span id="card-toggle-text-standalone-audio-studio">إخفاء</span>
+              </button>
+            </div>
+            <div id="card-body-standalone-audio-studio" class="card-body">
+              <div class="upload-box">
+                <div class="field">
+                  <label for="standaloneAudioFileInput">ملف الجمل / المشاهد</label>
+                  <input type="file" id="standaloneAudioFileInput" accept=".txt,.json" multiple onchange="handleStandaloneAudioFile(event)">
+                </div>
+                <div class="helper-box">
+                  يدعم `TXT` العادي، وملفات `scene_XX.txt` المتعددة من مخرجات المشروع، أو `JSON` بصيغة `scenes` / `items` / مصفوفة مباشرة تحتوي `narration` أو `text`.
+                </div>
+                <div id="standaloneAudioFileMeta" class="file-chip" style="display:none;"></div>
+              </div>
+              <div class="grid-2" style="margin-top:14px;">
+                <div class="field">
+                  <label for="standaloneAudioVoiceSelect">صوت TTS</label>
+                  <select id="standaloneAudioVoiceSelect"></select>
+                </div>
+                <div class="field">
+                  <label for="standaloneAudioParallelSelect">توازي الصوت</label>
+                  <select id="standaloneAudioParallelSelect">
+                    <option value="1">1 - آمن</option>
+                    <option value="3" selected>3 - متوازن</option>
+                    <option value="5">5 - أسرع</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label for="standaloneAudioModelInput">موديل TTS</label>
+                <input type="text" id="standaloneAudioModelInput" value="gemini-2.5-flash-preview-tts">
+              </div>
+              <div class="field">
+                <label for="standaloneAudioStylePrefixInput">نمط الصوت (Style Prefix)</label>
+                <textarea id="standaloneAudioStylePrefixInput" style="min-height:60px;font-size:0.82rem;direction:ltr;">Say in a warm, natural voice:</textarea>
+              </div>
+              <div class="field">
+                <label for="standaloneAudioModeSelect">طريقة التوليد</label>
+                <select id="standaloneAudioModeSelect">
+                  <option value="all-in-one" selected>كل الجمل في دفعات ذكية</option>
+                  <option value="per-sentence">جملة بجملة</option>
+                </select>
+              </div>
+              <div class="toolbar">
+                <button class="btn btn-secondary" type="button" onclick="copyMainAudioSettingsToStandalone()">نسخ إعدادات المرحلة الرابعة</button>
+                <button id="runStandaloneAudioBtn" class="btn btn-audio" type="button" onclick="runStandaloneAudioStudio()" disabled>توليد الصوت فقط</button>
+                <button id="downloadStandaloneAudioBtn" class="btn btn-secondary" type="button" onclick="downloadStandaloneAudioBundle()" disabled>تحميل حزمة الصوت</button>
+                <button class="btn btn-ghost" type="button" onclick="resetStandaloneAudioStudio()">مسح الاستوديو</button>
+              </div>
+              <div id="standaloneAudioStatus" class="status"></div>
+              <div id="standaloneAudioList" class="standalone-audio-list" style="margin-top:14px;">
+                <div class="hint">ارفع ملف الجمل أولًا، ثم شغّل توليد الصوت فقط من هنا.</div>
+              </div>
+            </div>
+          </div>
+</div>
+</div>
+      </main>
+    </div>
+  </section>
+</div>
+<div class="settings-overlay" id="settingsOverlay" onclick="if(event.target.id==='settingsOverlay')closeSettings()">
+  <div class="settings-sheet">
+    <div class="settings-head">
+      <h2 class="section-title" style="margin:0;">الإعدادات المتقدمة</h2>
+      <button class="close-btn" type="button" onclick="closeSettings()">✕ إغلاق</button>
+    </div>
+    <div class="settings-subtabs">
+      <button class="settings-subtab active" data-stab="general" type="button" onclick="switchSettingsTab('general')">الإعدادات العامة</button>
+      <button class="settings-subtab" data-stab="prompts" type="button" onclick="switchSettingsTab('prompts')">البرومبتات</button>
+    </div>
+    <div id="settingsTabGeneral">
+<details class="settings-section" open>
+              <summary>
+                <span>إعدادات الصور</span>
+                <span class="settings-section-icon">▾</span>
+              </summary>
+              <div class="settings-section-body">
+                <div class="grid-2">
+                  <div class="field">
+                    <label for="imageModelSelect">موديل الصور</label>
+                    <select id="imageModelSelect">
+                      <option value="flux-schnell" selected>Flux Schnell</option>
+                      <option value="flux-dev">Flux Dev</option>
+                      <option value="sdxl">Stable Diffusion XL</option>
+                      <option value="standard">Standard</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="imageStyleSelect">استايل الصور</label>
+                    <select id="imageStyleSelect">
+                      <option value="cinematic">🎬 Cinematic</option>
+                      <option value="stylized3d" selected>🧊 Stylized 3D / Disney-like</option>
+                      <option value="realisticcgi">🧱 Realistic CGI</option>
+                      <option value="toon2d">✏️ 2D Cartoon / Stylized</option>
+                      <option value="anime">🎨 Anime / Illustrated</option>
+                      <option value="realistic">📷 Realistic Photography</option>
+                      <option value="oilpainting">🖼️ Oil Painting</option>
+                      <option value="comicbook">💥 Comic Book</option>
+                      <option value="darkfantasy">🌑 Dark Fantasy</option>
+                      <option value="watercolor">🌊 Watercolor</option>
+                      <option value="stickfigure">🖊️ Stick Figure</option>
+                      <option value="flatdesign">📐 Flat Design</option>
+                      <option value="neon">🌆 Neon / Cyberpunk</option>
+                      <option value="vintage">📻 Vintage / Retro</option>
+                      <option value="3drender">🧊 3D Render (Legacy)</option>
+                      <option value="isometric">📦 Isometric</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label for="shapeSelect">المقاس</label>
+                    <select id="shapeSelect">
+                      <option value="768x512" selected>Landscape 768x512</option>
+                      <option value="512x768">Portrait 512x768</option>
+                      <option value="768x768">Square 768x768</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="parallelImagesSelect">توازي الصور</label>
+                    <select id="parallelImagesSelect">
+                      <option value="1">1 - آمن</option>
+                      <option value="2" selected>2 - متوازن</option>
+                      <option value="3">3 - أسرع</option>
+                      <option value="4">4 - أقصى سرعة</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label for="resizeMethodSelect">طريقة تعديل المقاس</label>
+                    <select id="resizeMethodSelect">
+                      <option value="stretch" selected>Stretch (تمديد)</option>
+                      <option value="crop">Crop (قطع من المركز)</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="resizeLibrarySelect">مكتبة المعالجة</label>
+                    <select id="resizeLibrarySelect">
+                      <option value="native" selected>Browser Canvas (افتراضي)</option>
+                      <option value="konva">Konva.js (بديل)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field">
+                  <div class="toggle-row" style="margin-bottom:8px;">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="preserveMotionDetailToggle" checked>
+                      <span class="slider"></span>
+                    </label>
+                    <label for="preserveMotionDetailToggle">الحفاظ على تفاصيل الحركة من المرحلة الثانية</label>
+                  </div>
+                  <div class="helper-box">
+                    مفعّل افتراضيًا: يستخدم ملف الحركة النهائي تفاصيل `Motion Prompt` من المرحلة الثانية بدل اختصارها، مع حذف المؤثرات الجوية غير المرغوبة مثل الغبار والأتربة والجزيئات العائمة.
+                  </div>
+                </div>
+              </div>
+            </details>
+<details class="settings-section" open>
+              <summary>
+                <span>إعدادات Gemini</span>
+                <span class="settings-section-icon">▾</span>
+              </summary>
+              <div class="settings-section-body">
+                <div id="geminiSettingsBox">
+                  <div class="field">
+                    <label for="geminiApiKeysInput">مفاتيح Gemini API</label>
+                    <textarea id="geminiApiKeysInput" placeholder="ضع كل مفتاح في سطر مستقل"></textarea>
+                  </div>
+                  <div class="grid-2">
+                    <div class="field">
+                      <label for="geminiHeavyModelsInput">موديلات المهام الثقيلة</label>
+                      <textarea id="geminiHeavyModelsInput" placeholder="مثال: gemini-2.5-flash&#10;gemini-2.5-pro"></textarea>
+                    </div>
+                    <div class="field">
+                      <label for="geminiLightModelsInput">موديلات المهام الخفيفة</label>
+                      <textarea id="geminiLightModelsInput" placeholder="مثال: gemini-2.5-flash-lite&#10;gemini-2.5-flash"></textarea>
+                    </div>
+                  </div>
+                  <div class="helper-box">
+                    نفس مفاتيح Gemini تُستخدم أيضًا في توليد الصوت (مرحلة 4). فعّل الصوت في الأسفل وسيعمل تلقائيًا بنفس المفاتيح.
+                  </div>
+                </div>
+              </div>
+            </details>
+<details class="settings-section" open>
+              <summary>
+                <span>إعدادات الصوت</span>
+                <span class="settings-section-icon">▾</span>
+              </summary>
+              <div class="settings-section-body">
+                <div class="toggle-row">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="audioEnabledToggle" onchange="syncAudioUi()" checked>
+                    <span class="slider"></span>
+                  </label>
+                  <label for="audioEnabledToggle">تفعيل توليد الصوت (مرحلة 4)</label>
+                </div>
+                <div id="audioSettingsBox" style="display:none;">
+                  <div class="grid-2">
+                    <div class="field">
+                      <label for="audioVoiceSelect">صوت TTS</label>
+                      <select id="audioVoiceSelect">
+                        <option value="auto" selected>🤖 تلقائي — Gemini يختار</option>
+                        <option value="Aoede">Aoede (أنثى — دافئ)</option>
+                        <option value="Kore">Kore (أنثى — واضح)</option>
+                        <option value="Leda">Leda (أنثى — ناعم)</option>
+                        <option value="Zephyr">Zephyr (أنثى — خفيف)</option>
+                        <option value="Puck">Puck (ذكر — نشيط)</option>
+                        <option value="Charon">Charon (ذكر — عميق)</option>
+                        <option value="Fenrir">Fenrir (ذكر — قوي)</option>
+                        <option value="Orus">Orus (ذكر — رسمي)</option>
+                        <option value="Enceladus">Enceladus</option>
+                        <option value="Iapetus">Iapetus</option>
+                        <option value="Umbriel">Umbriel</option>
+                        <option value="Algieba">Algieba</option>
+                        <option value="Rasalgethi">Rasalgethi</option>
+                        <option value="Schedar">Schedar</option>
+                        <option value="Sadaltager">Sadaltager</option>
+                        <option value="Achernar">Achernar</option>
+                        <option value="Achird">Achird</option>
+                        <option value="Alnilam">Alnilam</option>
+                        <option value="Autonoe">Autonoe</option>
+                        <option value="Callirrhoe">Callirrhoe</option>
+                        <option value="Despina">Despina</option>
+                        <option value="Erinome">Erinome</option>
+                        <option value="Gacrux">Gacrux</option>
+                        <option value="Laomedeia">Laomedeia</option>
+                        <option value="Pulcherrima">Pulcherrima</option>
+                        <option value="Sadachbia">Sadachbia</option>
+                        <option value="Sulafat">Sulafat</option>
+                        <option value="Vindemiatrix">Vindemiatrix</option>
+                        <option value="Zubenelgenubi">Zubenelgenubi</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="audioParallelSelect">توازي الصوت</label>
+                      <select id="audioParallelSelect">
+                        <option value="1">1 - آمن</option>
+                        <option value="3" selected>3 - متوازن</option>
+                        <option value="5">5 - أسرع</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label for="audioModelInput">موديل TTS</label>
+                    <input type="text" id="audioModelInput" value="gemini-2.5-flash-preview-tts">
+                  </div>
+                  <div class="field">
+                    <label for="audioStylePrefixInput">نمط الصوت (Style Prefix)</label>
+                    <textarea id="audioStylePrefixInput" style="min-height:60px;font-size:0.82rem;direction:ltr;">Say in a warm, natural voice:</textarea>
+                  </div>
+                  <div class="field">
+                    <label for="audioModeSelect">طريقة التوليد</label>
+                    <select id="audioModeSelect">
+                      <option value="all-in-one" selected>كل المشاهد في دفعات ذكية (موفّر للـ quota)</option>
+                      <option value="per-sentence" disabled>جملة بجملة (موقوف مؤقتًا)</option>
+                    </select>
+                  </div>
+                  <div class="field" style="grid-column: 1 / -1;">
+                    <div class="toggle-row" style="margin-bottom:8px;">
+                      <label class="toggle-switch">
+                        <input type="checkbox" id="whisperAlignToggle" onchange="onWhisperAlignToggle()">
+                        <span class="slider"></span>
+                      </label>
+                      <label for="whisperAlignToggle">تقطيع دقيق بالتعرّف على الكلام (Whisper) — أدقّ من نسبة الحروف</label>
+                    </div>
+                    <div id="whisperAlignStatus" class="auto-creative-note" style="display:none;"></div>
+                    <div class="hint">يحمّل نموذج صوتي مرة واحدة (~480MB) ويعمل محليًا في متصفحك بدون أي تكلفة. لو فشل أو لم يكن واثقًا يرجع تلقائيًا لنسبة الحروف، فلن تقل الدقة عن النظام الحالي أبدًا.</div>
+                  </div>
+                  <div class="field" style="grid-column: 1 / -1;">
+                    <div class="toggle-row" style="margin-bottom:8px;">
+                      <label class="toggle-switch">
+                        <input type="checkbox" id="skipImageStageToggle" onchange="onSkipImageStageToggle()">
+                        <span class="slider"></span>
+                      </label>
+                      <label for="skipImageStageToggle">تخطّي مرحلة الصور في «تشغيل كل المراحل» — ولّد الصوت أولًا</label>
+                    </div>
+                    <div class="hint">عند التفعيل: يُولَّد الصوت قبل الصور، وتبقى بطاقات المشاهد بنصّها ومشغّل الصوت جاهزة للمراجعة. بعد ما تسمع وتطابق، اضغط زر «مرحلة الصور» لتوليد الصور (الصوت يبقى محفوظًا).</div>
+                  </div>
+                </div>
+              </div>
+            </details>
+<div class="toolbar">
+              <button id="saveProviderBtn" class="btn btn-secondary" onclick="saveAiProviderSettings()">حفظ الإعدادات</button>
+            </div>
+    </div>
+    <div id="settingsTabPrompts" style="display:none;">
+      <div class="helper-box" style="margin-bottom:12px;">عدّل تعليمات كل مرحلة بحرية. الرموز بين الأقواس المعقوفة إلزامية — لو حذفت أيًّا منها لن يُحفظ. زر «تحسين بـ Gemini» يحافظ على الرموز تلقائيًا.</div>
+      <div class="toolbar" style="margin-top:0;">
+        <button class="btn btn-secondary" type="button" onclick="exportPrompts()">تنزيل ملف البرومبتات</button>
+        <label class="btn btn-ghost" style="cursor:pointer;">استيراد ملف<input type="file" accept=".json" style="display:none;" onchange="importPrompts(event)"></label>
+      </div>
+      <div id="promptsEditorList"></div>
+    </div>
+  </div>
+</div>
+<div class="fixed-controls">
+  <button class="scroll-top-btn" type="button" onclick="scrollToTop()" title="الصعود للأعلى">↑</button>
+  <button class="scroll-top-btn scroll-down-btn" type="button" onclick="scrollToBottom()" title="النزول للأسفل">↓</button>
+  <button id="fixedDownloadBtn" class="fixed-download-btn" type="button" onclick="downloadProjectBundle()" style="display:none;">تحميل المشروع</button>
+  <button id="stopOperationsBtn" class="fixed-download-btn fixed-stop-btn" type="button" onclick="requestStopOperations()" disabled>إيقاف العمليات</button>
+  <div class="fixed-status" id="fixedStatus"></div>
+</div>
+<script>
+  // جسر: بلجنات Perchance (t2i / generateText) متاحة في السكربت الداخلي فقط،
+  // فنمرّرها إلى window حتى يراها app.js الخارجي.
+  if (typeof t2i !== "undefined") window.t2i = t2i;
+  if (typeof generateText !== "undefined") window.generateText = generateText;
+  if (typeof generateImage !== "undefined") window.generateImage = generateImage;
+</script>
+<script src="https://cdn.jsdelivr.net/gh/cazanova971/Metaplus10@main/app.js"></script>
