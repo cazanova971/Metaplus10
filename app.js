@@ -60,6 +60,8 @@
   let standaloneFullAudio = { wavUrl: "", base64Data: "", error: "" };
   let failedAudioBatches = [];
   let ownStorySource = { fileName: "", text: "" };
+  let excludedGeminiKeys = [];        // مفاتيح مستبعدة مؤقتًا (تُتخطّى داخليًا)
+  let keysTestedThisSession = false;  // هل اختُبرت المفاتيح في هذه الجلسة؟
 
   // ─── إعدادات TTS ─────────────────────────────────────────────────────────
   const TTS_KEY_COOLDOWN_MS   = 30_000;   // 30s تبريد للمفاتيح الفاشلة
@@ -416,14 +418,127 @@
   function saveAiProviderSettings() {
     aiProviderSettings = collectAiProviderSettingsFromUi();
     localStorage.setItem(AI_PROVIDER_STORAGE_KEY, JSON.stringify(aiProviderSettings));
+    keysTestedThisSession = false; // المفاتيح ربما تغيّرت — أعد الاختبار عند التشغيل التالي
     syncAiProviderUi();
     const keyCount = parseMultilineList(aiProviderSettings.geminiApiKeysText).length;
     const heavyCount = parseMultilineList(aiProviderSettings.geminiHeavyModelsText).length;
     const lightCount = parseMultilineList(aiProviderSettings.geminiLightModelsText).length;
     updateAiProviderStatus(`تم حفظ إعدادات Gemini | keys: ${keyCount} | heavy: ${heavyCount} | light: ${lightCount}`);
   }
-  function getGeminiApiKeys() {
+  function getAllGeminiKeys() {
     return parseMultilineList(aiProviderSettings.geminiApiKeysText);
+  }
+  function getGeminiApiKeys() {
+    const all = getAllGeminiKeys();
+    if (!excludedGeminiKeys.length) return all;
+    const excl = new Set(excludedGeminiKeys);
+    const usable = all.filter((k) => !excl.has(k));
+    // لو كل المفاتيح مستبعدة مؤقتًا، نرجّع الكل كحل أخير بدل ما نفشل تمامًا
+    return usable.length ? usable : all;
+  }
+  // ─── اختبار مفاتيح Gemini واستبعاد/حذف الفاشلة ───────────────────────────
+  const EXCLUDED_KEYS_STORAGE_KEY = "story_studio_excluded_gemini_keys";
+  function loadExcludedKeys() {
+    try { excludedGeminiKeys = JSON.parse(localStorage.getItem(EXCLUDED_KEYS_STORAGE_KEY) || "[]"); } catch (e) { excludedGeminiKeys = []; }
+    if (!Array.isArray(excludedGeminiKeys)) excludedGeminiKeys = [];
+  }
+  function saveExcludedKeys() { try { localStorage.setItem(EXCLUDED_KEYS_STORAGE_KEY, JSON.stringify(excludedGeminiKeys)); } catch (e) {} }
+  function updateKeysTestStatus(msg, isError) {
+    const el = document.getElementById("keysTestStatus");
+    if (el) { el.textContent = msg || ""; el.style.color = isError ? "var(--danger)" : "var(--accent)"; }
+  }
+  function renderExcludedKeys() {
+    const box = document.getElementById("excludedKeysBox");
+    if (!box) return;
+    if (!excludedGeminiKeys.length) { box.innerHTML = '<div class="hint">لا توجد مفاتيح مستبعدة.</div>'; return; }
+    const chips = excludedGeminiKeys.map((k) => '<span class="file-chip" style="display:inline-block;margin:2px;">⛔ ' + maskApiKey(k) + '</span>').join(" ");
+    box.innerHTML = '<div class="scene-meta">مفاتيح مستبعدة مؤقتًا (' + excludedGeminiKeys.length + '):</div>' + chips;
+  }
+  function clearExcludedKeys() {
+    excludedGeminiKeys = [];
+    saveExcludedKeys();
+    renderExcludedKeys();
+    updateKeysTestStatus("تم إلغاء الاستبعاد عن كل المفاتيح المستبعدة مؤقتًا.");
+  }
+  function classifyKeyError(httpCode, errBody) {
+    const msg = String((errBody && errBody.error && errBody.error.message) || "");
+    const st = String((errBody && errBody.error && errBody.error.status) || "");
+    const blob = (msg + " " + st);
+    // ميت نهائيًا: مفتاح غير صالح / محظور / صلاحية مرفوضة / حساب موقوف
+    if (/API key not valid|API_KEY_INVALID|api key expired|invalid api key/i.test(blob)) return "dead";
+    if (/PERMISSION_DENIED|consumer_suspended|account.*suspend|suspended|blocked|disabled|forbidden/i.test(blob)) return "dead";
+    if (httpCode === 400 && /key/i.test(blob)) return "dead";
+    if (httpCode === 401 || httpCode === 403) return "dead";
+    // مؤقت: كوتة / ضغط / غير متاح
+    if (httpCode === 429 || httpCode === 500 || httpCode === 503) return "temp";
+    if (/quota|rate limit|RESOURCE_EXHAUSTED|overloaded|UNAVAILABLE|try again/i.test(blob)) return "temp";
+    return "temp"; // غير معروف: نستبعد مؤقتًا ولا نحذف (تجنّبًا لحذف مفتاح سليم بالخطأ)
+  }
+  async function testSingleGeminiKey(apiKey, model) {
+    const controller = registerAbortController(new AbortController());
+    const timeoutId = setTimeout(() => { try { controller.abort(); } catch (e) {} }, 15000);
+    try {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + normalizeGeminiModelName(model) + ":generateContent?key=" + encodeURIComponent(apiKey), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ping" }] }], generationConfig: { maxOutputTokens: 1, temperature: 0 } })
+      });
+      let data = {};
+      try { data = await response.json(); } catch (e) { data = {}; }
+      if (response.ok) return { status: "ok" };
+      return { status: classifyKeyError(response.status, data), code: response.status, message: (data && data.error && data.error.message) || ("HTTP " + response.status) };
+    } catch (error) {
+      if (error && error.name === "AbortError" && stopRequested) return { status: "stopped" };
+      return { status: "temp", code: 0, message: (error && error.message) || "network/timeout" };
+    } finally {
+      clearTimeout(timeoutId);
+      unregisterAbortController(controller);
+    }
+  }
+  async function testAllGeminiKeys(options = {}) {
+    options = options || {};
+    const allKeys = getAllGeminiKeys();
+    if (!allKeys.length) { updateKeysTestStatus("لا توجد مفاتيح لاختبارها.", true); return { okCount: 0, temp: [], dead: [] }; }
+    const model = getGeminiModels("light")[0] || getGeminiModels("heavy")[0] || "gemini-2.5-flash";
+    const btn = document.getElementById("testKeysBtn");
+    if (btn) btn.disabled = true;
+    const dead = [], temp = [];
+    let okCount = 0;
+    try {
+      for (let i = 0; i < allKeys.length; i++) {
+        if (stopRequested) { updateKeysTestStatus("تم إيقاف الاختبار.", true); break; }
+        const key = allKeys[i];
+        updateKeysTestStatus("اختبار المفتاح " + (i + 1) + "/" + allKeys.length + " (" + maskApiKey(key) + ")...");
+        const r = await testSingleGeminiKey(key, model);
+        if (r.status === "stopped") { updateKeysTestStatus("تم إيقاف الاختبار.", true); break; }
+        if (r.status === "ok") okCount++;
+        else if (r.status === "dead") dead.push(key);
+        else temp.push(key);
+      }
+      // حذف الميتة نهائيًا من نص المفاتيح
+      if (dead.length) {
+        const remaining = allKeys.filter((k) => dead.indexOf(k) === -1);
+        aiProviderSettings.geminiApiKeysText = remaining.join("\n");
+        try { localStorage.setItem(AI_PROVIDER_STORAGE_KEY, JSON.stringify(aiProviderSettings)); } catch (e) {}
+        const inputEl = document.getElementById("geminiApiKeysInput");
+        if (inputEl) inputEl.value = aiProviderSettings.geminiApiKeysText;
+      }
+      // المستبعدة مؤقتًا = نتيجة هذه الجولة (تُلغى تلقائيًا عن المفاتيح التي عادت تعمل)
+      excludedGeminiKeys = Array.from(new Set(temp));
+      saveExcludedKeys();
+      keysTestedThisSession = true;
+      renderExcludedKeys();
+      updateKeysTestStatus("اكتمل الاختبار | صالح: " + okCount + " | مستبعد مؤقتًا: " + temp.length + " | محذوف نهائيًا: " + dead.length, false);
+      return { okCount: okCount, temp: temp, dead: dead };
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+  async function ensureKeysTestedBeforeRun() {
+    if (keysTestedThisSession) return;
+    if (!getAllGeminiKeys().length) return;
+    try { await testAllGeminiKeys({ auto: true }); } catch (e) { console.warn("auto key test failed", e); }
   }
   function getGeminiModels(taskType) {
     const text = taskType === "heavy"
@@ -3158,6 +3273,8 @@
     resetProject();
     setPipelineButtonsDisabled(true);
     setCurrentPhase("تشغيل كل المراحل");
+    status.textContent = "فحص مفاتيح Gemini قبل البدء...";
+    await ensureKeysTestedBeforeRun();
     status.textContent = "بدأ التشغيل المدمج لكل المراحل...";
     try {
       const storyOk = await runStoryPipeline({ skipReset: true, managedByRunAll: true });
@@ -3683,6 +3800,8 @@
     if (runAll) runAll.disabled = true;
     if (p1) p1.disabled = true;
     setCurrentPhase("مشروع جاهز — تشغيل الكل");
+    setLongformStatus("فحص مفاتيح Gemini قبل البدء...");
+    await ensureKeysTestedBeforeRun();
     setLongformStatus("بدأ تشغيل كل المراحل من ملف JSON...");
     try {
       const phaseOk = await runLongformPhaseOne({ managedByRunAll: true });
@@ -3734,6 +3853,8 @@
 
   aiProviderSettings = loadAiProviderSettings();
   syncAiProviderUi();
+  loadExcludedKeys();
+  renderExcludedKeys();
   updateAiProviderStatus("Gemini Direct API — المزود الحالي للنصوص والصوت.");
   updateDialectOptions();
   syncAudioUi();

@@ -1,0 +1,52 @@
+{
+  "project_type": "true_crime_arabic_longform",
+  "language": "ar",
+  "target_duration_minutes": 4,
+  "title": "اختبار: الطرد الأخير",
+  "case_name": "اختبار مصغّر لتبويبة المشروع الجاهز",
+  "country_focus": "مصر",
+  "content_safety": {
+    "no_real_faces": true,
+    "no_graphic_violence": true,
+    "no_gore": true,
+    "respect_victims": true,
+    "avoid_defamation": true
+  },
+  "story_summary": "قصة قصيرة للاختبار فقط: ساعي توصيل يستلم طردًا غامضًا في ليلة ممطرة، فتتحول مهمة عادية إلى لغز صغير يكشف خيطًا غير متوقع. النص مختصر عمدًا لتجربة التقطيع والإنتاج والصوت بسرعة.",
+  "intro_hook": "بعض الطرود لا تُسلَّم كما تبدأ. صندوق صغير، عنوان غامض، وليلة لا تشبه باقي الليالي.",
+  "tone_and_style": {
+    "narration_style": "cinematic Arabic true crime documentary",
+    "pace": "slow-burn, suspenseful, respectful",
+    "voice_direction": "calm, deep, serious Arabic narration",
+    "visual_direction": "dark cinematic, realistic, symbolic visuals only, no real faces"
+  },
+  "thumbnail_concepts": [
+    {
+      "concept": "صندوق طرد وحيد تحت مصباح ليلي",
+      "visual_prompt": "Cinematic dark rainy street at night, a single small cardboard parcel under a lonely streetlamp, wet pavement reflections, no people, no faces, mysterious respectful documentary mood, 16:9, high contrast.",
+      "text_on_thumbnail": "الطرد الأخير",
+      "ctr_reason": "صورة بسيطة غامضة تثير الفضول دون صدمة."
+    }
+  ],
+  "youtube_metadata": {
+    "youtube_title": "اختبار: الطرد الأخير",
+    "youtube_description": "فيديو اختباري قصير لتجربة تبويبة المشروع الجاهز (تقطيع + صور + صوت).",
+    "hashtags": ["#اختبار", "#TrueCrimeArabic"],
+    "tags": ["اختبار", "مشروع جاهز", "تقطيع"]
+  },
+  "paragraphs": [
+    "في ليلة ممطرة، خرج ساعي التوصيل في آخر مهمة قبل أن ينتهي يومه الطويل. الشوارع كانت شبه فارغة، والمصابيح تتأرجح تحت المطر، ولم يكن هناك ما يوحي بأن هذه الرحلة القصيرة ستترك سؤالًا معلّقًا حتى الصباح.",
+    "كان الطرد صغيرًا وثقيلًا أكثر مما يجب، بلا اسم واضح للمرسل، وبعنوان كُتب بخط متعجّل. توقف الساعي أمام مبنى قديم، راجع الرقم مرتين، ثم ضغط الجرس وانتظر تحت المظلة بينما الماء يتساقط من حافة قبعته.",
+    "لم يفتح أحد الباب. حاول الاتصال بالرقم المرفق، لكن الخط كان مغلقًا. في هذه اللحظات الصغيرة يبدأ القلق هادئًا: ربما تأخر صاحب الطرد، وربما العنوان خاطئ، وربما هناك تفصيل بسيط لم ينتبه إليه أحد بعد.",
+    "قرر الساعي تسجيل ملاحظة وإعادة الطرد إلى المستودع. وفي طريق العودة، لاحظ أن ملصق العنوان يخفي تحته ملصقًا آخر بعنوان مختلف تمامًا. عندها فقط أدرك أن المهمة العادية تحولت إلى بداية حكاية تحتاج إلى من يكملها بهدوء.",
+    "تنتهي القصة هنا عند حدود ما هو متاح، فهي مجرد نموذج اختباري قصير. الهدف ليس الحل، بل تجربة الأداة: كيف تُقسَّم الفقرات إلى مشاهد، وكيف تُبنى الصور والصوت، خطوة بخطوة دون تعقيد."
+  ],
+  "call_to_action": "هذا فيديو اختباري قصير لتجربة الأداة فقط.",
+  "production_notes": {
+    "music_style": "dark ambient, low volume, slow tension",
+    "caption_style": "clean Arabic subtitles, high contrast",
+    "visual_style": "cinematic reenactment style, symbolic visuals only",
+    "thumbnail_style": "high CTR, mysterious, no real people"
+  },
+  "fact_sensitivity_note": "نص خيالي بالكامل لأغراض الاختبار، لا يشير إلى واقعة حقيقية."
+}

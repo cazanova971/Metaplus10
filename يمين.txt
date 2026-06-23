@@ -663,6 +663,15 @@
                     <label for="geminiApiKeysInput">مفاتيح Gemini API</label>
                     <textarea id="geminiApiKeysInput" placeholder="ضع كل مفتاح في سطر مستقل"></textarea>
                   </div>
+                  <div class="toolbar" style="margin-top:6px;">
+                    <button id="testKeysBtn" class="btn btn-secondary" type="button" onclick="testAllGeminiKeys()">🔑 اختبار المفاتيح</button>
+                    <button id="clearExcludedKeysBtn" class="btn btn-ghost" type="button" onclick="clearExcludedKeys()">إعادة تفعيل المستبعدة</button>
+                  </div>
+                  <div id="keysTestStatus" class="status"></div>
+                  <div id="excludedKeysBox" style="margin-top:6px;"></div>
+                  <div class="helper-box">
+                    «اختبار المفاتيح» يجرّب كل مفتاح بطلب بسيط: الصالح يبقى، الفاشل مؤقتًا (كوتة/ضغط) يُستبعَد داخليًا فلا تُهدر عليه طلبات، والميت نهائيًا (مفتاح غير صالح/محظور) يُحذف نهائيًا من القائمة. يعمل تلقائيًا أيضًا عند «شغّل الكل».
+                  </div>
                   <div class="grid-2">
                     <div class="field">
                       <label for="geminiHeavyModelsInput">موديلات المهام الثقيلة</label>
