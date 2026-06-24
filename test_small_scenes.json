@@ -1,0 +1,69 @@
+{
+  "project_type": "true_crime_arabic_longform",
+  "language": "ar",
+  "target_duration_minutes": 3,
+  "title": "اختبار: مشاهد جاهزة",
+  "country_focus": "مصر",
+  "content_safety": {
+    "no_real_faces": true,
+    "no_graphic_violence": true,
+    "no_gore": true,
+    "respect_victims": true,
+    "avoid_defamation": true
+  },
+  "tone_and_style": {
+    "narration_style": "cinematic Arabic true crime documentary",
+    "pace": "slow-burn, suspenseful, respectful",
+    "voice_direction": "calm, deep, serious Arabic narration",
+    "visual_direction": "dark cinematic, realistic, symbolic visuals only, no real faces"
+  },
+  "intro_hook": "بعض الطرود لا تُسلَّم كما تبدأ.",
+  "story_summary": "ملف اختباري قصير لوضع المشاهد الجاهزة: كل مشهد فيه نص السرد وبرومبت الصورة جاهزَين.",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "narration": "في ليلة ممطرة، خرج ساعي التوصيل في آخر مهمة قبل أن ينتهي يومه الطويل، والشوارع شبه فارغة تحت المطر.",
+      "visual_prompt": "Cinematic dark rainy Arabic street at night, a delivery scooter seen from behind under a lonely streetlamp, wet pavement reflections, no people faces, symbolic, 16:9, high contrast, moody.",
+      "motion_prompt": "slow push-in toward the streetlamp",
+      "duration_seconds": 30
+    },
+    {
+      "scene_number": 2,
+      "narration": "كان الطرد صغيرًا وثقيلًا أكثر مما يجب، بلا اسم واضح للمرسل، وبعنوان كُتب بخط متعجّل على ورقة باهتة.",
+      "visual_prompt": "Close-up of a small plain cardboard parcel on a wet seat, faded handwritten address label, dim phone glow, no faces, symbolic evidence style, dark cinematic, 16:9.",
+      "motion_prompt": "subtle slow zoom on the label",
+      "duration_seconds": 28
+    },
+    {
+      "scene_number": 3,
+      "narration": "لم يفتح أحد الباب، وكان الخط مغلقًا، وبدأ القلق يكبر مع كل دقيقة صمت أمام المبنى القديم.",
+      "visual_prompt": "A dark old apartment building entrance at night, a faint light in one window, empty doorway, rain, no people, symbolic suspenseful documentary mood, 16:9.",
+      "motion_prompt": "static shot with gentle rain motion",
+      "duration_seconds": 26
+    }
+  ],
+  "thumbnail_concepts": [
+    {
+      "concept": "طرد وحيد تحت مصباح ليلي",
+      "visual_prompt": "Cinematic dark rainy street at night, a single small parcel under a lonely streetlamp, no people, mysterious, 16:9.",
+      "text_on_thumbnail": "الطرد الأخير",
+      "ctr_reason": "غموض بسيط يثير الفضول."
+    }
+  ],
+  "youtube_metadata": {
+    "youtube_title": "اختبار: مشاهد جاهزة",
+    "youtube_description": "ملف اختباري لوضع المشاهد الجاهزة.",
+    "hashtags": ["#اختبار"],
+    "tags": ["اختبار", "مشاهد جاهزة"],
+    "pinned_comment": "فيديو اختباري فقط.",
+    "chapters": ["00:00 - البداية", "00:30 - الطرد", "00:58 - الباب المغلق"]
+  },
+  "call_to_action": "فيديو اختباري قصير لتجربة الأداة.",
+  "production_notes": {
+    "music_style": "dark ambient, low volume, slow tension",
+    "caption_style": "clean Arabic subtitles, high contrast",
+    "visual_style": "cinematic reenactment style, symbolic visuals only",
+    "thumbnail_style": "high CTR, mysterious, no real people"
+  },
+  "fact_sensitivity_note": "نص خيالي بالكامل لأغراض الاختبار."
+}

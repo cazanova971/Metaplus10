@@ -62,6 +62,7 @@
   let ownStorySource = { fileName: "", text: "" };
   let excludedGeminiKeys = [];        // مفاتيح مستبعدة مؤقتًا (تُتخطّى داخليًا)
   let keysTestedThisSession = false;  // هل اختُبرت المفاتيح في هذه الجلسة؟
+  let longformScenesReady = false;    // مشروع JSON فيه مشاهد جاهزة (visual_prompt) → تخطّي phase 2/3
 
   // ─── إعدادات TTS ─────────────────────────────────────────────────────────
   const TTS_KEY_COOLDOWN_MS   = 30_000;   // 30s تبريد للمفاتيح الفاشلة
@@ -1785,6 +1786,7 @@
     fullProjectAudio = { wavUrl: "", base64Data: "", error: "" };
     failedAudioBatches = [];
     phaseThreePlan = [];
+    longformScenesReady = false;
     projectTtsStyle = "";
     projectTtsVoice = "";
     document.getElementById("audioStylePrefixInput").value = "Say in a warm, natural voice:";
@@ -2003,6 +2005,19 @@
     const status = document.getElementById("pipelineStatus");
     const runProductionBtn = document.getElementById("runProductionBtn");
     if (!phaseOneProject?.scenes?.length) { alert("نفّذ المرحلة الأولى أولًا."); return false; }
+    // وضع المشاهد الجاهزة: حزمة الإنتاج مبنية من الملف بالفعل — تخطّي طلب Gemini
+    if (longformScenesReady && productionPack.length) {
+      ["pack","visual","motion","continuity"].forEach((k) => setStage(k, "ok", "جاهزة من الملف (بدون طلب Gemini)."));
+      renderProductionList();
+      if (!options.managedByRunAll) {
+        document.getElementById("runAssetsBtn").disabled = !productionPack.length;
+        runProductionBtn.disabled = false;
+        autoCollapseCards(["phase-2-progress", "scene-list-card", "production-card"]);
+        switchToTab("production");
+      }
+      status.textContent = "حزمة الإنتاج جاهزة من الملف — تم تخطّي المرحلة الثانية.";
+      return true;
+    }
     if (!options.managedByRunAll) clearStopRequest();
     beginManagedOperation();
     runProductionBtn.disabled = true;
@@ -2297,28 +2312,45 @@
     renderAssetList();
     try {
       ["motion-files","images","preview","export"].forEach((k) => setStage(k, "loading", "جارٍ التجهيز..."));
-      const parsed = safeParseJson(await generateTextWithGemini(getPhaseThreeInstruction(phaseOneProject, productionPack, {
-        preserveMotionDetail: input.preserveMotionDetail
-      }), "light"));
-      phaseThreePlan = Array.isArray(parsed.scene_assets) ? parsed.scene_assets : [];
-      sceneAssets = phaseThreePlan.map((item, index) => {
-        const pack = productionPack[index] || {};
-        const motionSource = input.preserveMotionDetail
-          ? (pack.motion_prompt || item.motion_file_text || "")
-          : (item.motion_file_text || pack.motion_prompt || "");
-        return {
-          sceneNumber: item.scene_number || pack.scene_number || index + 1,
-          title: item.title || pack.title || "",
-          finalPrompt: stripLeadingStyleDirectives(item.final_image_prompt || pack.visual_prompt || ""),
+      if (longformScenesReady) {
+        // وضع المشاهد الجاهزة: ابنِ الأصول مباشرة من برومبتات الملف — تخطّي طلب Gemini (phase 3)
+        phaseThreePlan = [];
+        sceneAssets = productionPack.map((pack, index) => ({
+          sceneNumber: pack.scene_number || index + 1,
+          title: pack.title || "",
+          finalPrompt: stripLeadingStyleDirectives(pack.visual_prompt || ""),
           imageData: "",
-          motionText: [sanitizeMotionText(motionSource), motionSafety].filter(Boolean).join(", "),
-          cameraDirection: item.camera_direction || pack.camera_direction || "",
-          continuityNotes: item.continuity_notes || pack.continuity_notes || "",
+          motionText: [sanitizeMotionText(pack.motion_prompt || ""), motionSafety].filter(Boolean).join(", "),
+          cameraDirection: pack.camera_direction || "",
+          continuityNotes: pack.continuity_notes || "",
           error: ""
-        };
-      });
-      renderAssetList();
-      setStage("motion-files", "ok", "تم تجهيز ملفات الحركة والنص النهائي عبر Gemini.");
+        }));
+        renderAssetList();
+        setStage("motion-files", "ok", "تم تجهيز الأصول من برومبتات الملف (بدون طلب Gemini).");
+      } else {
+        const parsed = safeParseJson(await generateTextWithGemini(getPhaseThreeInstruction(phaseOneProject, productionPack, {
+          preserveMotionDetail: input.preserveMotionDetail
+        }), "light"));
+        phaseThreePlan = Array.isArray(parsed.scene_assets) ? parsed.scene_assets : [];
+        sceneAssets = phaseThreePlan.map((item, index) => {
+          const pack = productionPack[index] || {};
+          const motionSource = input.preserveMotionDetail
+            ? (pack.motion_prompt || item.motion_file_text || "")
+            : (item.motion_file_text || pack.motion_prompt || "");
+          return {
+            sceneNumber: item.scene_number || pack.scene_number || index + 1,
+            title: item.title || pack.title || "",
+            finalPrompt: stripLeadingStyleDirectives(item.final_image_prompt || pack.visual_prompt || ""),
+            imageData: "",
+            motionText: [sanitizeMotionText(motionSource), motionSafety].filter(Boolean).join(", "),
+            cameraDirection: item.camera_direction || pack.camera_direction || "",
+            continuityNotes: item.continuity_notes || pack.continuity_notes || "",
+            error: ""
+          };
+        });
+        renderAssetList();
+        setStage("motion-files", "ok", "تم تجهيز ملفات الحركة والنص النهائي عبر Gemini.");
+      }
       setStage("images", "loading", `جارٍ توليد الصور بالتوازي (${getImageParallelLimit()} مهام متزامنة) | استايل: ${imageStyleKey}...`);
       await runParallelImageGeneration(shape, model, imageStyleModifier, status, {
         maxTotalMs: 180_000,
@@ -3552,9 +3584,15 @@
     const ps = document.getElementById("pipelineStatus");
     if (ps) ps.textContent = msg;
   }
+  // هل الملف فيه مشاهد جاهزة (narration + visual_prompt) ؟
+  function longformHasReadyScenes(d) {
+    return !!(d && Array.isArray(d.scenes) && d.scenes.length
+      && d.scenes.some(function (sc) { return sc && String(sc.narration || "").trim(); }));
+  }
   function validateLongformData(d) {
     if (!d || typeof d !== "object") return "الملف غير صالح (ليس JSON كائن).";
-    if (!Array.isArray(d.paragraphs) || !d.paragraphs.length) return "الملف لا يحتوي على مصفوفة paragraphs.";
+    if (longformHasReadyScenes(d)) return "";
+    if (!Array.isArray(d.paragraphs) || !d.paragraphs.length) return "الملف لا يحتوي على scenes ولا paragraphs.";
     if (!d.paragraphs.some(function (p) { return String(p || "").trim(); })) return "مصفوفة paragraphs فارغة.";
     return "";
   }
@@ -3592,22 +3630,37 @@
     const d = longformSource.data;
     if (!d) { el.innerHTML = '<div class="hint">لم يتم رفع ملف صالح بعد.</div>'; return; }
     const s = getLongformSettings();
-    const totalWords = (d.paragraphs || []).reduce(function (a, p) { return a + _lfCountWords(p); }, 0);
-    const estScenes = Math.max(1, Math.round(totalWords / s.targetWords));
-    const estMin = Math.max(1, Math.round((totalWords / s.wordsPerSec) / 60));
     const safety = d.content_safety || {};
     const ts = d.tone_and_style || {};
     const safetyBits = [];
     if (safety.no_real_faces) safetyBits.push("بدون وجوه حقيقية");
     if (safety.no_graphic_violence || safety.no_gore) safetyBits.push("بدون عنف صادم");
     if (safety.respect_victims) safetyBits.push("احترام الضحايا");
-    el.innerHTML = [
-      '<div class="scene-title">' + _lfEscHtml(d.title || "بدون عنوان") + '</div>',
-      '<div class="scene-meta">الفقرات: ' + (d.paragraphs || []).length + ' · إجمالي الكلمات: ~' + totalWords + ' · مشاهد متوقّعة: ~' + estScenes + ' · مدة تقديرية: ~' + estMin + ' دقيقة</div>',
-      '<div class="scene-meta">طول المشهد: ' + s.sceneSeconds + ' ث × ' + s.wordsPerSec + ' كلمة/ث = ~' + s.targetWords + ' كلمة/مشهد</div>',
-      ts.narration_style || ts.voice_direction ? ('<div class="scene-meta">النبرة: ' + _lfEscHtml(ts.narration_style || "") + (ts.voice_direction ? (' — ' + _lfEscHtml(ts.voice_direction)) : "") + '</div>') : '',
-      safetyBits.length ? ('<div class="scene-meta">أمان: ' + safetyBits.join(" · ") + '</div>') : ''
-    ].join("");
+    const ready = longformHasReadyScenes(d);
+    let lines;
+    if (ready) {
+      const scenes = d.scenes.filter(function (sc) { return sc && String(sc.narration || "").trim(); });
+      const totalWords = scenes.reduce(function (a, sc) { return a + _lfCountWords(sc.narration); }, 0);
+      const withPrompt = scenes.filter(function (sc) { return String(sc.visual_prompt || "").trim(); }).length;
+      const totalSec = scenes.reduce(function (a, sc) { return a + (Number(sc.duration_seconds) || Math.round(_lfCountWords(sc.narration) / s.wordsPerSec)); }, 0);
+      lines = [
+        '<div class="scene-title">' + _lfEscHtml(d.title || "بدون عنوان") + ' <span class="scene-meta">(مشاهد جاهزة)</span></div>',
+        '<div class="scene-meta">✅ وضع المشاهد الجاهزة: ' + scenes.length + ' مشهد · فيها برومبت صورة: ' + withPrompt + '/' + scenes.length + ' · كلمات: ~' + totalWords + ' · مدة تقديرية: ~' + Math.max(1, Math.round(totalSec / 60)) + ' دقيقة</div>',
+        '<div class="scene-meta">سيتخطّى الموقع توليد البرومبتات (phase 2/3) ويولّد الصورة والصوت لكل مشهد مباشرة.</div>'
+      ];
+    } else {
+      const totalWords = (d.paragraphs || []).reduce(function (a, p) { return a + _lfCountWords(p); }, 0);
+      const estScenes = Math.max(1, Math.round(totalWords / s.targetWords));
+      const estMin = Math.max(1, Math.round((totalWords / s.wordsPerSec) / 60));
+      lines = [
+        '<div class="scene-title">' + _lfEscHtml(d.title || "بدون عنوان") + '</div>',
+        '<div class="scene-meta">الفقرات: ' + (d.paragraphs || []).length + ' · إجمالي الكلمات: ~' + totalWords + ' · مشاهد متوقّعة: ~' + estScenes + ' · مدة تقديرية: ~' + estMin + ' دقيقة</div>',
+        '<div class="scene-meta">طول المشهد: ' + s.sceneSeconds + ' ث × ' + s.wordsPerSec + ' كلمة/ث = ~' + s.targetWords + ' كلمة/مشهد</div>'
+      ];
+    }
+    if (ts.narration_style || ts.voice_direction) lines.push('<div class="scene-meta">النبرة: ' + _lfEscHtml(ts.narration_style || "") + (ts.voice_direction ? (' — ' + _lfEscHtml(ts.voice_direction)) : "") + '</div>');
+    if (safetyBits.length) lines.push('<div class="scene-meta">أمان: ' + safetyBits.join(" · ") + '</div>');
+    el.innerHTML = lines.join("");
   }
   function renderLongformExtras() {
     const el = document.getElementById("longformExtras");
@@ -3722,6 +3775,23 @@
     const style = "Read in a " + (ts.voice_direction || "calm, deep, serious") + " documentary voice. Natural pace, clear Arabic pronunciation, leave a short natural pause after each sentence.";
     return { voice: voice, style: style };
   }
+  // بناء المشاهد من مصفوفة scenes الجاهزة في الملف (narration + visual_prompt)
+  function buildScenesFromJsonScenes(d, settings) {
+    const out = [];
+    (d.scenes || []).forEach(function (sc) {
+      const narration = normalizeText((sc && sc.narration) || "");
+      if (!narration) return;
+      out.push({
+        title: normalizeText((sc && sc.title) || narration.split(/\s+/).slice(0, 4).join(" ")),
+        narration: narration,
+        visual_prompt: String((sc && sc.visual_prompt) || "").trim(),
+        motion_prompt: String((sc && sc.motion_prompt) || "").trim(),
+        duration_seconds: Math.max(3, Number(sc && sc.duration_seconds) || Math.round(_lfCountWords(narration) / settings.wordsPerSec))
+      });
+    });
+    out.forEach(function (sc, i) { sc.scene_number = i + 1; });
+    return out;
+  }
   async function buildPhaseOneFromJson() {
     const d = longformSource.data;
     if (!d) { alert("ارفع ملف JSON صالح أولًا."); return false; }
@@ -3738,10 +3808,17 @@
     const bible = buildBibleFromJson(d);
     setStage("bible", "ok", "تم بناء الهوية البصرية من الـ JSON (بدون طلب).");
     throwIfStopRequested();
-    // التقطيع الحرفي يتم محليًا بالجافاسكربت — لا طلبات Gemini
-    setLongformStatus("تقطيع حرفي محلي للفقرات...");
-    const scenes = splitLongformParagraphsLocally(d, s);
-    if (!scenes.length) { setStage("scenes", "fail", "فشل التقطيع."); return false; }
+    // المشاهد: إمّا جاهزة من الملف (مع برومبت صورة) أو تقطيع حرفي محلي للفقرات
+    const readyScenes = longformHasReadyScenes(d);
+    let scenes;
+    if (readyScenes) {
+      setLongformStatus("استيراد المشاهد الجاهزة من الملف (مع برومبتات الصور)...");
+      scenes = buildScenesFromJsonScenes(d, s);
+    } else {
+      setLongformStatus("تقطيع حرفي محلي للفقرات...");
+      scenes = splitLongformParagraphsLocally(d, s);
+    }
+    if (!scenes.length) { setStage("scenes", "fail", "فشل تجهيز المشاهد."); return false; }
     const fullStory = scenes.map(function (sc) { return sc.narration; }).join(" ");
     const langMap = { ar: "Arabic", en: "English", fr: "French", es: "Spanish", de: "German", tr: "Turkish" };
     const language = langMap[(d.language || "ar")] || "Arabic";
@@ -3778,9 +3855,29 @@
       story: { story_summary: d.story_summary || "", full_story: fullStory },
       scenes: scenes
     };
+    // وضع المشاهد الجاهزة: ابنِ حزمة الإنتاج مباشرة من برومبتات الملف وتخطّى phase 2/3
+    longformScenesReady = readyScenes;
+    if (readyScenes) {
+      productionPack = scenes.map(function (sc) {
+        return {
+          scene_number: sc.scene_number,
+          title: sc.title || "",
+          duration_seconds: sc.duration_seconds || 5,
+          visual_prompt: sc.visual_prompt || "",
+          motion_prompt: sc.motion_prompt || "",
+          camera_direction: "",
+          continuity_notes: ""
+        };
+      });
+      renderProductionList();
+      setStage("pack", "ok", "تم استيراد " + productionPack.length + " حزمة إنتاج جاهزة من الملف.");
+      setStage("visual", "ok", "برومبتات الصور جاهزة من الملف (بدون طلب).");
+      setStage("motion", "ok", "برومبتات الحركة جاهزة من الملف.");
+      setStage("continuity", "ok", "تم تثبيت الاستمرارية من الهوية البصرية.");
+    }
     setStage("concept", "ok", concept.logline || "تم تجهيز الفكرة.");
     setStage("story", "ok", "تم تجهيز نص السرد (" + _lfCountWords(fullStory) + " كلمة).");
-    setStage("scenes", "ok", "تم التقطيع إلى " + scenes.length + " مشهد.");
+    setStage("scenes", "ok", (readyScenes ? "تم استيراد " : "تم التقطيع إلى ") + scenes.length + " مشهد.");
     document.getElementById("bibleOutput").textContent = [
       "Main Character Profile:\n" + phaseOneProject.bible.main_character_profile,
       "\nVisual Identity:\n" + phaseOneProject.bible.visual_identity,
@@ -3797,7 +3894,12 @@
     document.getElementById("audioStylePrefixInput").value = projectTtsStyle;
     ["longformProductionBtn", "longformAssetsBtn", "longformAudioBtn"].forEach(function (id) { const b = document.getElementById(id); if (b) b.disabled = false; });
     document.getElementById("runProductionBtn").disabled = false;
-    setLongformStatus("تم تقطيع " + scenes.length + " مشهد. جاهز للإنتاج.");
+    if (readyScenes) {
+      const ab = document.getElementById("runAssetsBtn"); if (ab) ab.disabled = false;
+      setLongformStatus("تم استيراد " + scenes.length + " مشهد جاهز (مع برومبتات الصور). جاهز للصور والصوت مباشرة.");
+    } else {
+      setLongformStatus("تم تقطيع " + scenes.length + " مشهد. جاهز للإنتاج.");
+    }
     return true;
   }
   async function runLongformPhaseOne(options = {}) {
