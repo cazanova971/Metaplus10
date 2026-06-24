@@ -810,6 +810,7 @@
       audioVoice: document.getElementById("audioVoiceSelect").value,
       audioModel: normalizeText(document.getElementById("audioModelInput").value) || "gemini-2.5-flash-preview-tts",
       audioParallel: Math.max(1, Number(document.getElementById("audioParallelSelect").value) || 3),
+      audioBatchCharLimit: Math.max(200, Number(document.getElementById("audioBatchCharLimitInput")?.value) || 800),
       audioMode: document.getElementById("audioModeSelect").value || "all-in-one",
       useOwnStory: document.getElementById("ownStoryToggle")?.checked || false,
       ownStoryText: ownStorySource.text || "",
@@ -2932,7 +2933,8 @@
       const fullProjectText = stylePrefix
         ? `${stylePrefix}\n\n${allNarrations.join(ttsSceneSeparator())}`
         : allNarrations.join(ttsSceneSeparator());
-      const shouldUseSingleRequest = fullProjectText.length > 0 && fullProjectText.length <= TTS_SINGLE_REQUEST_CHAR_LIMIT;
+      const batchCharLimit = input.audioBatchCharLimit || TTS_BATCH_CHAR_LIMIT;
+      const shouldUseSingleRequest = fullProjectText.length > 0 && fullProjectText.length <= batchCharLimit;
       const effectiveAudioMode = requestedAudioMode === "per-sentence"
         ? "per-sentence"
         : (shouldUseSingleRequest ? "single-request" : "smart-batches");
@@ -2980,71 +2982,76 @@
           renderAssetList();
         }
       } else if (effectiveAudioMode === "smart-batches") {
-        // ─── كل المشاهد لكن على دفعات ذكية مثل سكربت البايثون ───────────
-        const batches = createSmartAudioBatches(scenes, TTS_BATCH_CHAR_LIMIT);
+        // ─── دفعات ذكية بالتوازي: كل دفعة تبدأ بمفتاح مختلف لتوزيع الحِمل ───
+        const batches = createSmartAudioBatches(scenes, batchCharLimit);
         let processedBatches = 0;
         let generatedScenes = 0;
-        const projectBatchSegments = [];
+        const projectBatchSegments = new Array(batches.length).fill(null);
         let splitFallbackUsed = false;
-        setStage("audio-generate", "loading", `إرسال ${scenes.length} مشهد في ${batches.length} دفعة ذكية...`);
+        const concurrency = Math.max(1, Math.min(input.audioParallel || 1, batches.length));
+        setStage("audio-generate", "loading", `إرسال ${scenes.length} مشهد في ${batches.length} دفعة ذكية (توازي ${concurrency})...`);
 
-        for (const batch of batches) {
-          throwIfStopRequested();
-          const narrations = batch.map(item => item.text);
-          const batchMeta = {
-            id: `audio-batch-smart-${batch[0]?.index ?? 0}-${batch[batch.length - 1]?.index ?? 0}`,
-            kind: "smart-batch",
-            label: `دفعة المشاهد ${batch.map((item) => item.index + 1).join("، ")}`,
-            sceneIndexes: batch.map((item) => item.index),
-            texts: narrations.slice()
-          };
-          const combinedText = stylePrefix
-            ? `${stylePrefix}\n\n${narrations.join(ttsSceneSeparator())}`
-            : narrations.join(ttsSceneSeparator());
-
-          try {
-            status.textContent = `دفعة ${processedBatches + 1} / ${batches.length} — ${batch.length} مشهد`;
-            const base64Data = await callGeminiTts(combinedText, autoVoice, input.audioModel, apiKeys, status);
-            const { samples, sampleRate } = await decodePcmBase64ToFloat32(base64Data);
-            projectBatchSegments.push(samples);
+        let nextBatch = 0;
+        async function batchWorker() {
+          while (nextBatch < batches.length) {
+            throwIfStopRequested();
+            const bIdx = nextBatch++;
+            const batch = batches[bIdx];
+            const narrations = batch.map(item => item.text);
+            const batchMeta = {
+              id: `audio-batch-smart-${batch[0]?.index ?? 0}-${batch[batch.length - 1]?.index ?? 0}`,
+              kind: "smart-batch",
+              label: `دفعة المشاهد ${batch.map((item) => item.index + 1).join("، ")}`,
+              sceneIndexes: batch.map((item) => item.index),
+              texts: narrations.slice()
+            };
+            const combinedText = stylePrefix
+              ? `${stylePrefix}\n\n${narrations.join(ttsSceneSeparator())}`
+              : narrations.join(ttsSceneSeparator());
+            // تدوير المفاتيح: الدفعة bIdx تبدأ بالمفتاح (bIdx % عدد المفاتيح) مع إبقاء الباقي كـ fallback
+            const rot = apiKeys.length ? (bIdx % apiKeys.length) : 0;
+            const rotatedKeys = apiKeys.length ? apiKeys.slice(rot).concat(apiKeys.slice(0, rot)) : apiKeys;
             try {
-              const charCounts = narrations.map(n => n.length || 1);
-              const segments = batch.length === 1
-                ? [samples]
-                : await alignedOrRatioSplit(samples, sampleRate, charCounts, narrations);
+              const base64Data = await callGeminiTts(combinedText, autoVoice, input.audioModel, rotatedKeys, status);
+              const { samples, sampleRate } = await decodePcmBase64ToFloat32(base64Data);
+              projectBatchSegments[bIdx] = samples;
+              try {
+                const charCounts = narrations.map(n => n.length || 1);
+                const segments = batch.length === 1
+                  ? [samples]
+                  : await alignedOrRatioSplit(samples, sampleRate, charCounts, narrations);
 
-              batch.forEach((item, localIndex) => {
-                const seg = segments[localIndex] || segments[segments.length - 1] || samples;
-                sceneAudios[item.index] = createAudioArtifactFromSamples(seg, sampleRate);
-                generatedScenes += 1;
-              });
-              clearFailedAudioBatch(batchMeta.id);
-            } catch (splitErr) {
-              console.error(splitErr);
-              splitFallbackUsed = true;
+                batch.forEach((item, localIndex) => {
+                  const seg = segments[localIndex] || segments[segments.length - 1] || samples;
+                  sceneAudios[item.index] = createAudioArtifactFromSamples(seg, sampleRate);
+                  generatedScenes += 1;
+                });
+                clearFailedAudioBatch(batchMeta.id);
+              } catch (splitErr) {
+                console.error(splitErr);
+                splitFallbackUsed = true;
+                batch.forEach((item) => {
+                  sceneAudios[item.index] = { wavUrl: "", base64Data: "", error: "split_failed_full_audio_available" };
+                });
+              }
+            } catch (err) {
+              if (isStopError(err)) throw err;
+              console.error(err);
+              upsertFailedAudioBatch({ ...batchMeta, error: err.message });
               batch.forEach((item) => {
-                sceneAudios[item.index] = { wavUrl: "", base64Data: "", error: "split_failed_full_audio_available" };
+                sceneAudios[item.index] = { wavUrl: "", base64Data: "", error: err.message };
               });
             }
-          } catch (err) {
-            if (isStopError(err)) throw err;
-            console.error(err);
-            upsertFailedAudioBatch({ ...batchMeta, error: err.message });
-            batch.forEach((item) => {
-              sceneAudios[item.index] = { wavUrl: "", base64Data: "", error: err.message };
-            });
-          }
-
-          processedBatches += 1;
-          renderAssetList();
-          status.textContent = `تم إنهاء ${processedBatches} / ${batches.length} دفعة صوتية | ${generatedScenes} / ${scenes.length} مشهد`;
-
-          if (processedBatches < batches.length) {
-            await waitWithStop(TTS_BATCH_PAUSE_MS);
+            processedBatches += 1;
+            renderAssetList();
+            status.textContent = `تم إنهاء ${processedBatches} / ${batches.length} دفعة صوتية | ${generatedScenes} / ${scenes.length} مشهد`;
           }
         }
+        await Promise.all(Array.from({ length: concurrency }, () => batchWorker()));
 
-        if (projectBatchSegments.length === batches.length) {
+        // الصوت الكامل يتجمّع بالترتيب الصحيح فقط لو كل الدفعات نجحت
+        const allBatchesOk = projectBatchSegments.every((s) => s && s.length);
+        if (allBatchesOk) {
           const mergedSamples = concatFloat32Arrays(projectBatchSegments);
           if (mergedSamples.length) {
             fullProjectAudio = createAudioArtifactFromSamples(mergedSamples, 24000);
@@ -3136,7 +3143,8 @@
       const fullProjectText = stylePrefix
         ? `${stylePrefix}\n\n${allNarrations.join(ttsSceneSeparator())}`
         : allNarrations.join(ttsSceneSeparator());
-      const shouldUseSingleRequest = fullProjectText.length > 0 && fullProjectText.length <= TTS_SINGLE_REQUEST_CHAR_LIMIT;
+      const batchCharLimit = input.audioBatchCharLimit || TTS_BATCH_CHAR_LIMIT;
+      const shouldUseSingleRequest = fullProjectText.length > 0 && fullProjectText.length <= batchCharLimit;
       const effectiveAudioMode = requestedAudioMode === "per-sentence"
         ? "per-sentence"
         : (shouldUseSingleRequest ? "single-request" : "smart-batches");
