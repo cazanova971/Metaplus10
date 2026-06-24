@@ -3603,7 +3603,12 @@
       if (ym.youtube_title) parts.push('<div class="field"><label>العنوان</label><input type="text" readonly value="' + _lfEscHtml(ym.youtube_title) + '"></div>');
       if (ym.youtube_description) parts.push('<div class="field"><label>الوصف</label><textarea readonly style="min-height:90px;">' + _lfEscHtml(ym.youtube_description) + '</textarea></div>');
       if (Array.isArray(ym.hashtags) && ym.hashtags.length) parts.push('<div class="scene-meta">' + ym.hashtags.map(_lfEscHtml).join(" ") + '</div>');
+      if (Array.isArray(ym.tags) && ym.tags.length) parts.push('<div class="field"><label>الوسوم (tags)</label><textarea readonly style="min-height:50px;">' + _lfEscHtml(ym.tags.join("، ")) + '</textarea></div>');
+      if (Array.isArray(ym.chapters) && ym.chapters.length) parts.push('<div class="field"><label>الفصول (chapters)</label><textarea readonly style="min-height:90px;direction:ltr;">' + _lfEscHtml(ym.chapters.join("\n")) + '</textarea></div>');
       parts.push('</div></div>');
+    }
+    if (d.call_to_action) {
+      parts.push('<div class="card" style="margin-top:10px;"><div class="card-body"><div class="field"><label>دعوة لاتخاذ إجراء (CTA)</label><textarea readonly style="min-height:50px;">' + _lfEscHtml(d.call_to_action) + '</textarea></div></div></div>');
     }
     if (Array.isArray(d.thumbnail_concepts) && d.thumbnail_concepts.length) {
       parts.push('<div class="card" style="margin-top:10px;"><div class="card-body">');
@@ -3615,65 +3620,88 @@
     }
     el.innerHTML = parts.join("");
   }
-  function getLongformBibleInstruction(d) {
+  // ── تقطيع حرفي محلي (بدون أي طلب Gemini) ──────────────────────────────────
+  function _lfSplitSentences(text) {
+    return String(text || "").replace(/\s+/g, " ").trim()
+      .split(/(?<=[\.\!\?؟؛])\s+/)
+      .map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+  function splitParagraphToScenesLocal(paragraph, targetWords) {
+    const minW = Math.max(3, Math.round(targetWords * 0.7));
+    const maxW = Math.max(minW + 1, Math.round(targetWords * 1.4));
+    // وحدات: الجُمَل، والجُمَل الطويلة جدًا تُفكَّك على الفواصل العربية كحل ثانوي
+    const units = [];
+    _lfSplitSentences(paragraph).forEach(function (s) {
+      if (_lfCountWords(s) > maxW) {
+        s.split(/(?<=،)\s+/).map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (p) { units.push(p); });
+      } else { units.push(s); }
+    });
+    const scenes = [];
+    let buf = [], bufW = 0;
+    units.forEach(function (u) {
+      const w = _lfCountWords(u);
+      if (bufW > 0 && bufW + w > maxW) { scenes.push(buf.join(" ")); buf = []; bufW = 0; }
+      buf.push(u); bufW += w;
+      if (bufW >= targetWords) { scenes.push(buf.join(" ")); buf = []; bufW = 0; }
+    });
+    if (buf.length) {
+      const rest = buf.join(" ");
+      if (scenes.length && _lfCountWords(rest) < minW) scenes[scenes.length - 1] += " " + rest;
+      else scenes.push(rest);
+    }
+    return scenes;
+  }
+  function splitLongformParagraphsLocally(d, settings) {
+    const paragraphs = (d.paragraphs || []).map(function (p) { return normalizeText(String(p || "")); }).filter(Boolean);
+    const all = [];
+    paragraphs.forEach(function (p) {
+      splitParagraphToScenesLocal(p, settings.targetWords).forEach(function (txt) {
+        const narration = normalizeText(txt);
+        if (!narration) return;
+        const title = narration.split(/\s+/).slice(0, 4).join(" ");
+        all.push({ title: title, narration: narration });
+      });
+    });
+    all.forEach(function (sc, i) {
+      sc.scene_number = i + 1;
+      sc.duration_seconds = Math.max(3, Math.round(_lfCountWords(sc.narration) / settings.wordsPerSec));
+    });
+    return all;
+  }
+  // ── بناء الهوية البصرية (bible) محليًا من حقول الـ JSON (بدون طلب Gemini) ──
+  function buildBibleFromJson(d) {
     const ts = d.tone_and_style || {};
     const safety = d.content_safety || {};
     const prod = d.production_notes || {};
     const thumbs = (d.thumbnail_concepts || []).map(function (t) { return t.visual_prompt; }).filter(Boolean).join(" || ");
-    return [
-      "You are a visual continuity director for a documentary-style video. Build a VISUAL BIBLE in JSON only (no markdown).",
-      "Project title: \"" + (d.title || "") + "\". Country/setting: " + (d.country_focus || "") + ". Language: Arabic.",
-      "Story summary: " + (d.story_summary || ""),
-      "Visual direction (MUST follow): " + (ts.visual_direction || ""),
-      "Production visual style: " + (prod.visual_style || "") + ". Thumbnail mood: " + (prod.thumbnail_style || "") + ".",
-      "Reference symbolic prompts from thumbnails (reuse their mood and recurring objects): " + thumbs,
-      "CONTENT SAFETY (HARD RULES — encode them explicitly into visual_identity AND continuity_rules): "
-        + (safety.no_real_faces ? "NEVER show real or identifiable human faces (faceless, from behind, silhouettes, symbolic objects only). " : "")
-        + (safety.no_graphic_violence ? "No graphic violence. " : "")
-        + (safety.no_gore ? "No gore or blood. " : "")
-        + (safety.respect_victims ? "Respect the victim; no exploitation. " : "")
-        + (safety.avoid_defamation ? "No real names or brand logos visible; avoid defamation. " : ""),
-      "Define recurring SYMBOLIC motifs for cross-scene consistency (e.g. a lonely car at night, an empty driver seat, a glowing phone on a seat, an incomplete map route, a closed investigation file, a distant streetlamp, a courthouse), a FIXED color palette, and a FIXED cinematic style so every generated image looks like the same film.",
-      "Return EXACTLY this JSON shape: {\"main_character_profile\":\"\",\"supporting_cast\":\"\",\"world_rules\":\"\",\"visual_identity\":\"\",\"continuity_rules\":\"\",\"narrative_goal\":\"\"}"
-    ].join(" ");
+    const motifs = "recurring symbolic motifs (lonely car at night, empty driver seat, glowing phone on a seat, incomplete map route, closed investigation file, distant streetlamp, courthouse)";
+    const safetyRules = [
+      safety.no_real_faces ? "NEVER show real or identifiable human faces (faceless / from behind / silhouettes / symbolic objects only)" : "",
+      safety.no_graphic_violence ? "no graphic violence" : "",
+      safety.no_gore ? "no gore or blood" : "",
+      safety.respect_victims ? "respect the victim, no exploitation" : "",
+      safety.avoid_defamation ? "no real names or brand logos visible, avoid defamation" : ""
+    ].filter(Boolean).join("; ");
+    return {
+      main_character_profile: "Anonymous, faceless symbolic subject (never identifiable); represented through symbolic objects rather than a real person.",
+      supporting_cast: "No identifiable individuals; only anonymous, symbolic or silhouetted presences when strictly needed.",
+      world_rules: [ d.country_focus ? ("Setting: " + d.country_focus + ".") : "", "Contemporary urban night atmosphere.", prod.visual_style || "", d.fact_sensitivity_note ? "Handle sensitive/open-case details carefully; symbolic only." : "" ].filter(Boolean).join(" "),
+      visual_identity: [ ts.visual_direction || "dark cinematic, symbolic visuals only", prod.visual_style || "", prod.thumbnail_style ? ("thumbnail mood: " + prod.thumbnail_style) : "", thumbs ? ("visual references: " + thumbs) : "" ].filter(Boolean).join(". "),
+      continuity_rules: [ "Keep ONE consistent dark cinematic documentary style across ALL scenes", "fixed color palette", motifs, safetyRules ].filter(Boolean).join("; ") + ".",
+      narrative_goal: d.story_summary || ""
+    };
   }
-  function getLongformSplitInstruction(paragraphText, targetWords) {
-    const minW = Math.max(3, Math.round(targetWords * 0.8));
-    const maxW = Math.round(targetWords * 1.2);
-    return [
-      "You split an Arabic narration PARAGRAPH into sequential scenes for a video. VERBATIM MODE.",
-      "ABSOLUTE RULES: Use the EXACT original words. Do NOT rewrite, paraphrase, summarize, translate, add, correct, or remove any word. Your ONLY job is to insert split points.",
-      "Split ONLY at natural sentence or strong-clause boundaries (after a period, question mark, or a strong comma).",
-      "Target about " + targetWords + " words per scene (acceptable range " + minW + "-" + maxW + "). A scene MAY exceed the range if a single sentence is longer, but NEVER cut a sentence in the middle.",
-      "Keep the original order. Cover the ENTIRE paragraph with no omissions and no additions. Concatenating all scene narrations in order MUST reproduce the original paragraph text exactly (whitespace aside).",
-      "For each scene write a very short Arabic title (2-4 words).",
-      "Return valid JSON ONLY, no markdown, escape double quotes inside strings.",
-      "Return exactly: {\"scenes\":[{\"title\":\"\",\"narration\":\"\"}]}",
-      "PARAGRAPH:",
-      paragraphText
-    ].join("\n");
-  }
-  async function splitLongformParagraphs(d, targetWords, status) {
-    const paragraphs = (d.paragraphs || []).map(function (p) { return String(p || "").trim(); }).filter(Boolean);
-    const allScenes = [];
-    for (let i = 0; i < paragraphs.length; i++) {
-      throwIfStopRequested();
-      const msg = "تقطيع حرفي: فقرة " + (i + 1) + " / " + paragraphs.length + "...";
-      if (status) status.textContent = msg;
-      setLongformStatus(msg);
-      let scenes = [];
-      try {
-        const parsed = safeParseJson(await generateTextWithGemini(getLongformSplitInstruction(paragraphs[i], targetWords), "light"));
-        scenes = Array.isArray(parsed.scenes) ? parsed.scenes : [];
-      } catch (e) { scenes = []; }
-      if (!scenes.length) scenes = [{ title: "مشهد", narration: paragraphs[i] }];
-      scenes.forEach(function (sc) {
-        const narration = normalizeText(sc.narration || "");
-        if (!narration) return;
-        allScenes.push({ title: normalizeText(sc.title || "مشهد"), narration: narration });
-      });
-    }
-    return allScenes;
+  // ── أسلوب الصوت محليًا من voice_direction (بدون طلب Gemini) ────────────────
+  function buildTtsFromJson(d) {
+    const ts = d.tone_and_style || {};
+    const vd = String(ts.voice_direction || "").toLowerCase();
+    let voice = "Iapetus"; // measured, long-form narration (افتراضي)
+    if (/deep|dramatic|thriller|mystery|serious/.test(vd)) voice = "Charon";
+    else if (/formal|authoritative|documentary/.test(vd)) voice = "Orus";
+    else if (/calm|soft|soothing|elegant/.test(vd)) voice = "Schedar";
+    else if (/warm|gentle|emotional/.test(vd)) voice = "Aoede";
+    const style = "Read in a " + (ts.voice_direction || "calm, deep, serious") + " documentary voice. Natural pace, clear Arabic pronunciation, leave a short natural pause after each sentence.";
+    return { voice: voice, style: style };
   }
   async function buildPhaseOneFromJson() {
     const d = longformSource.data;
@@ -3684,24 +3712,17 @@
     setStage("concept", "loading", "تجهيز الفكرة من الـ JSON...");
     setStage("bible", "loading", "بناء الهوية البصرية من اتجاه الصورة وقيود الأمان...");
     setStage("story", "loading", "تجهيز نص السرد...");
-    setStage("scenes", "loading", "تقطيع حرفي حسب طول المشهد...");
-    setLongformStatus("بدأ تجهيز المشروع الجاهز...");
+    setStage("scenes", "loading", "تقطيع حرفي محلي حسب طول المشهد...");
+    setLongformStatus("بدأ تجهيز المشروع الجاهز (محليًا، بدون طلبات Gemini)...");
     const ts = d.tone_and_style || {};
-    const safety = d.content_safety || {};
-    let bible = {};
-    try { bible = safeParseJson(await generateTextWithGemini(getLongformBibleInstruction(d), "light")); } catch (e) { bible = {}; }
-    if (!bible || typeof bible !== "object") bible = {};
-    if (!bible.visual_identity) bible.visual_identity = (ts.visual_direction || "dark cinematic, symbolic visuals only") + (safety.no_real_faces ? ", no real or identifiable faces" : "");
-    if (!bible.continuity_rules) bible.continuity_rules = "Consistent dark cinematic documentary style; recurring symbolic motifs; " + (safety.no_real_faces ? "never show identifiable faces; " : "") + (safety.no_gore ? "no gore; " : "") + "fixed color palette across all scenes.";
-    if (!bible.main_character_profile) bible.main_character_profile = "Anonymous, faceless symbolic subject (never identifiable); represented through symbolic objects rather than a real person.";
-    setStage("bible", "ok", "تم بناء الهوية البصرية وقيود الأمان.");
+    // الهوية البصرية تُبنى محليًا من حقول الـ JSON — لا طلب Gemini
+    const bible = buildBibleFromJson(d);
+    setStage("bible", "ok", "تم بناء الهوية البصرية من الـ JSON (بدون طلب).");
     throwIfStopRequested();
-    const scenes = await splitLongformParagraphs(d, s.targetWords, status);
+    // التقطيع الحرفي يتم محليًا بالجافاسكربت — لا طلبات Gemini
+    setLongformStatus("تقطيع حرفي محلي للفقرات...");
+    const scenes = splitLongformParagraphsLocally(d, s);
     if (!scenes.length) { setStage("scenes", "fail", "فشل التقطيع."); return false; }
-    scenes.forEach(function (sc, idx) {
-      sc.scene_number = idx + 1;
-      sc.duration_seconds = Math.max(3, Math.round(_lfCountWords(sc.narration) / s.wordsPerSec));
-    });
     const fullStory = scenes.map(function (sc) { return sc.narration; }).join(" ");
     const langMap = { ar: "Arabic", en: "English", fr: "French", es: "Spanish", de: "German", tr: "Turkish" };
     const language = langMap[(d.language || "ar")] || "Arabic";
@@ -3750,17 +3771,11 @@
     document.getElementById("storyOutput").textContent = fullStory;
     renderSummary();
     renderSceneList();
-    try {
-      setLongformStatus("تجهيز أسلوب التعليق الصوتي...");
-      const ttsResult = await generateTtsStylePrompt(phaseOneProject, { audience: concept.audience_selected, narrator: concept.narrator_persona });
-      projectTtsStyle = ttsResult.style || ("Read in a " + (ts.voice_direction || "calm serious") + " documentary voice:");
-      projectTtsVoice = ttsResult.voice || "";
-      document.getElementById("audioStylePrefixInput").value = projectTtsStyle;
-    } catch (e) {
-      projectTtsStyle = "Read in a calm, deep, serious documentary voice:";
-      projectTtsVoice = "";
-      document.getElementById("audioStylePrefixInput").value = projectTtsStyle;
-    }
+    // أسلوب الصوت يُبنى محليًا من voice_direction — لا طلب Gemini
+    const ttsResult = buildTtsFromJson(d);
+    projectTtsStyle = ttsResult.style;
+    projectTtsVoice = ttsResult.voice || "";
+    document.getElementById("audioStylePrefixInput").value = projectTtsStyle;
     ["longformProductionBtn", "longformAssetsBtn", "longformAudioBtn"].forEach(function (id) { const b = document.getElementById(id); if (b) b.disabled = false; });
     document.getElementById("runProductionBtn").disabled = false;
     setLongformStatus("تم تقطيع " + scenes.length + " مشهد. جاهز للإنتاج.");
