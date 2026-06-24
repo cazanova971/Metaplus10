@@ -823,6 +823,7 @@
       audioVoice: document.getElementById("standaloneAudioVoiceSelect").value || "auto",
       audioModel: normalizeText(document.getElementById("standaloneAudioModelInput").value) || "gemini-2.5-flash-preview-tts",
       audioParallel: Math.max(1, Number(document.getElementById("standaloneAudioParallelSelect").value) || 3),
+      audioBatchCharLimit: Math.max(200, Number(document.getElementById("standaloneAudioBatchCharLimitInput")?.value) || 800),
       audioMode: document.getElementById("standaloneAudioModeSelect").value || "all-in-one",
       stylePrefix: normalizeText(document.getElementById("standaloneAudioStylePrefixInput").value)
     };
@@ -996,6 +997,8 @@
     document.getElementById("standaloneAudioVoiceSelect").value = document.getElementById("audioVoiceSelect").value;
     document.getElementById("standaloneAudioParallelSelect").value = document.getElementById("audioParallelSelect").value;
     document.getElementById("standaloneAudioModelInput").value = document.getElementById("audioModelInput").value;
+    const _scl = document.getElementById("standaloneAudioBatchCharLimitInput"); const _mcl = document.getElementById("audioBatchCharLimitInput");
+    if (_scl && _mcl) _scl.value = _mcl.value;
     document.getElementById("standaloneAudioStylePrefixInput").value = document.getElementById("audioStylePrefixInput").value;
     document.getElementById("standaloneAudioModeSelect").value = document.getElementById("audioModeSelect").value === "per-sentence" ? "per-sentence" : "all-in-one";
     document.getElementById("standaloneAudioStatus").textContent = "تم نسخ إعدادات المرحلة الرابعة إلى الاستوديو المستقل.";
@@ -3170,54 +3173,62 @@
         }
         renderStandaloneAudioList();
       } else if (effectiveAudioMode === "smart-batches") {
-        const batches = createSmartAudioBatches(scenes, TTS_BATCH_CHAR_LIMIT);
+        // ─── دفعات ذكية بالتوازي للاستوديو المستقل (كل دفعة بمفتاح مختلف) ───
+        const batches = createSmartAudioBatches(scenes, batchCharLimit);
         let processedBatches = 0;
         let generatedScenes = 0;
-        const projectBatchSegments = [];
+        const projectBatchSegments = new Array(batches.length).fill(null);
         let splitFallbackUsed = false;
-        for (const batch of batches) {
-          throwIfStopRequested();
-          const narrations = batch.map((item) => item.text);
-          const combinedText = stylePrefix
-            ? `${stylePrefix}\n\n${narrations.join(ttsSceneSeparator())}`
-            : narrations.join(ttsSceneSeparator());
-          try {
-            status.textContent = `الاستوديو المستقل: دفعة ${processedBatches + 1} / ${batches.length}`;
-            const base64Data = await callGeminiTts(combinedText, autoVoice, input.audioModel, apiKeys, status);
-            const { samples, sampleRate } = await decodePcmBase64ToFloat32(base64Data);
-            projectBatchSegments.push(samples);
+        const concurrency = Math.max(1, Math.min(input.audioParallel || 1, batches.length));
+        let nextBatch = 0;
+        async function batchWorker() {
+          while (nextBatch < batches.length) {
+            throwIfStopRequested();
+            const bIdx = nextBatch++;
+            const batch = batches[bIdx];
+            const narrations = batch.map((item) => item.text);
+            const combinedText = stylePrefix
+              ? `${stylePrefix}\n\n${narrations.join(ttsSceneSeparator())}`
+              : narrations.join(ttsSceneSeparator());
+            const rot = apiKeys.length ? (bIdx % apiKeys.length) : 0;
+            const rotatedKeys = apiKeys.length ? apiKeys.slice(rot).concat(apiKeys.slice(0, rot)) : apiKeys;
             try {
-              const charCounts = narrations.map((n) => n.length || 1);
-              const segments = batch.length === 1
-                ? [samples]
-                : await alignedOrRatioSplit(samples, sampleRate, charCounts, narrations);
-              batch.forEach((item, localIndex) => {
-                const seg = segments[localIndex] || segments[segments.length - 1] || samples;
-                standaloneSceneAudios[item.index] = createAudioArtifactFromSamples(seg, sampleRate);
-                generatedScenes += 1;
-              });
-            } catch (splitErr) {
-              console.error(splitErr);
-              splitFallbackUsed = true;
+              const base64Data = await callGeminiTts(combinedText, autoVoice, input.audioModel, rotatedKeys, status);
+              const { samples, sampleRate } = await decodePcmBase64ToFloat32(base64Data);
+              projectBatchSegments[bIdx] = samples;
+              try {
+                const charCounts = narrations.map((n) => n.length || 1);
+                const segments = batch.length === 1
+                  ? [samples]
+                  : await alignedOrRatioSplit(samples, sampleRate, charCounts, narrations);
+                batch.forEach((item, localIndex) => {
+                  const seg = segments[localIndex] || segments[segments.length - 1] || samples;
+                  standaloneSceneAudios[item.index] = createAudioArtifactFromSamples(seg, sampleRate);
+                  generatedScenes += 1;
+                });
+              } catch (splitErr) {
+                console.error(splitErr);
+                splitFallbackUsed = true;
+                batch.forEach((item) => {
+                  standaloneSceneAudios[item.index] = { wavUrl: "", base64Data: "", error: "split_failed_full_audio_available" };
+                });
+              }
+            } catch (err) {
+              if (isStopError(err)) throw err;
+              console.error(err);
               batch.forEach((item) => {
-                standaloneSceneAudios[item.index] = { wavUrl: "", base64Data: "", error: "split_failed_full_audio_available" };
+                standaloneSceneAudios[item.index] = { wavUrl: "", base64Data: "", error: err.message };
               });
             }
-          } catch (err) {
-            if (isStopError(err)) throw err;
-            console.error(err);
-            batch.forEach((item) => {
-              standaloneSceneAudios[item.index] = { wavUrl: "", base64Data: "", error: err.message };
-            });
-          }
-          processedBatches += 1;
-          renderStandaloneAudioList();
-          status.textContent = `تم إنهاء ${processedBatches} / ${batches.length} دفعة | ${generatedScenes} / ${scenes.length} عنصر`;
-          if (processedBatches < batches.length) {
-            await waitWithStop(TTS_BATCH_PAUSE_MS);
+            processedBatches += 1;
+            renderStandaloneAudioList();
+            status.textContent = `تم إنهاء ${processedBatches} / ${batches.length} دفعة | ${generatedScenes} / ${scenes.length} عنصر`;
           }
         }
-        if (projectBatchSegments.length === batches.length) {
+        await Promise.all(Array.from({ length: concurrency }, () => batchWorker()));
+
+        const allBatchesOk = projectBatchSegments.every((s) => s && s.length);
+        if (allBatchesOk) {
           const mergedSamples = concatFloat32Arrays(projectBatchSegments);
           if (mergedSamples.length) standaloneFullAudio = createAudioArtifactFromSamples(mergedSamples, 24000);
         }
